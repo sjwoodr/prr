@@ -1,0 +1,6 @@
+# macOS / Windows filesystem cruft
+.DS_Store
+Thumbs.db
+
+# Distributable bundle — built from this directory, never committed.
+*.zip
