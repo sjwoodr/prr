@@ -4,7 +4,8 @@
 # a first review (full) or a re-review of a PR you already reviewed.
 #
 # Usage:  setup-review.sh <PR-url-or-number> [owner/repo]
-# Run from inside the target git repo (git worktree needs it).
+# A full PR URL works from any directory; a bare PR number must be run from
+# inside the PR's git repo.
 #
 # Author: Steve Woodruff (@sjwoodr)
 # SPDX-License-Identifier: MIT
@@ -24,8 +25,22 @@ else
   exit 2
 fi
 
-# No owner/repo given: fall back to the current directory's repo.
-[[ -z "$repo" ]] && repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+# Identify the current directory's repo, if we are inside one at all.
+current_repo=""
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  current_repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+fi
+
+# A bare PR number carries no repo of its own, so it must be run from inside
+# the PR's repo. A full PR URL carries owner/repo and works from anywhere.
+if [[ -z "$repo" ]]; then
+  if [[ -z "$current_repo" ]]; then
+    echo "error: a bare PR number must be run from inside the PR's git repo;" \
+         "pass a full PR URL to review a repo you do not have locally" >&2
+    exit 2
+  fi
+  repo="$current_repo"
+fi
 
 wt="/tmp/pr-${number}-wt"
 view="/tmp/pr-${number}-view.json"
@@ -38,16 +53,44 @@ since_diff="/tmp/pr-${number}-since-diff.txt"
 # Stale re-review artifacts from an earlier run would mislead the skill.
 rm -f "$prior_json" "$since_diff"
 
-# Idempotent: a re-run on the same PR replaces the old worktree.
-if git worktree list --porcelain | grep -qF "$wt"; then
+# Idempotent: drop whatever a previous run left at $wt. If it was a worktree
+# of the repo we are currently in, deregister it first; then clear the path.
+# (A worktree registered in a different repo can only be pruned from inside
+# that repo — the directory removal still applies, and that repo prunes its
+# own stale entry on its next prr run.)
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+   && git worktree list --porcelain | grep -qF "$wt"; then
   git worktree remove "$wt" --force
+  git worktree prune
 fi
-git worktree prune
+rm -rf "$wt"
 
-# Detached worktree at the PR head. pull/N/head works for fork PRs too,
-# and detached means no local branch to clean up later.
-git worktree add --detach "$wt" >/dev/null
-git -C "$wt" fetch -q origin "pull/${number}/head"
+# Materialize the PR head at $wt as a detached checkout. Two paths:
+#   local-worktree — the current directory IS the PR's repo: a detached
+#     git worktree of it, no extra clone, no extra download.
+#   standalone — the PR lives in a repo not checked out here (or we are not
+#     in a git repo at all): a throwaway repo whose origin is the PR's
+#     GitHub repo. The review reads the same files either way.
+if [[ -n "$current_repo" && "$current_repo" == "$repo" ]]; then
+  pr_source="local worktree"
+  git worktree add --detach "$wt" >/dev/null
+  fetch=(git -C "$wt" fetch -q origin)
+  depth=()  # worktree of the full local clone — history is already here
+else
+  pr_source="standalone (no local clone of $repo)"
+  git init -q "$wt"
+  git -C "$wt" remote add origin "https://github.com/${repo}.git"
+  # Authenticate HTTPS fetches via gh's token so private repos work even
+  # without a prior `gh auth setup-git`.
+  fetch=(git -C "$wt" -c "credential.helper=!gh auth git-credential" fetch -q origin)
+  # Shallow: a review needs the PR's file tree, not the repo's whole
+  # history. --depth 1 keeps even a large monorepo checkout small.
+  depth=(--depth 1)
+fi
+
+# Detached PR head. pull/N/head works for fork PRs too; in standalone mode
+# origin is the PR's GitHub repo, so the same fetch works without a clone.
+"${fetch[@]}" "${depth[@]}" "pull/${number}/head"
 git -C "$wt" checkout -q FETCH_HEAD
 head_sha="$(git -C "$wt" rev-parse HEAD)"
 
@@ -95,7 +138,7 @@ if [[ -n "$prior" ]]; then
   # files this PR touches — a `main` merge into the branch between reviews
   # would otherwise flood the diff with unrelated changes.
   if [[ -n "$prior_sha" ]]; then
-    git -C "$wt" fetch -q origin "$prior_sha" 2>/dev/null || true
+    "${fetch[@]}" "${depth[@]}" "$prior_sha" 2>/dev/null || true
     if git -C "$wt" cat-file -e "${prior_sha}^{commit}" 2>/dev/null; then
       mapfile -t pr_files < <(jq -r '.files[].path' "$view")
       if [[ ${#pr_files[@]} -gt 0 ]]; then
@@ -103,7 +146,12 @@ if [[ -n "$prior" ]]; then
       else
         git -C "$wt" diff "${prior_sha}..HEAD" > "$since_diff"
       fi
-      commits_since="$(git -C "$wt" rev-list --count "${prior_sha}..HEAD")"
+      # Two-dot diff above compares the two commits' trees directly, so it
+      # is exact even on a shallow checkout. The commit count needs the
+      # ancestry between them, which a shallow checkout lacks — flag it.
+      commits_since="$(git -C "$wt" rev-list --count "${prior_sha}..HEAD" 2>/dev/null || echo unknown)"
+      [[ -f "$wt/.git/shallow" && "$commits_since" != "0" ]] \
+        && commits_since="$commits_since (approx; shallow checkout)"
     else
       echo "prior review commit ${prior_sha} is not fetchable (likely a" \
            "rebase or force-push) — compare against the full PR diff instead" \
@@ -120,6 +168,7 @@ prr setup complete
   pr:              #$number  $(jq -r .title "$view")
   head sha:        $head_sha
   worktree:        $wt
+  pr source:       $pr_source
   files changed:   $(jq '.files | length' "$view")
   prior comments:  $(jq 'length' "$comments")
   MODE:            $mode

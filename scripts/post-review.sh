@@ -10,7 +10,8 @@
 # contain: commit_id, event (APPROVE|REQUEST_CHANGES|COMMENT), body, comments[].
 # A hidden `<!-- prr -->` marker is appended to the body before posting so a
 # later prr run recognises this as a prr review and switches to re-review.
-# Run from inside the target git repo (git worktree needs it).
+# A full PR URL works from any directory; a bare PR number must be run from
+# inside the PR's git repo.
 #
 # Author: Steve Woodruff (@sjwoodr)
 # SPDX-License-Identifier: MIT
@@ -34,12 +35,19 @@ wt="/tmp/pr-${number}-wt"
 marked="/tmp/pr-${number}-review.posted.json"
 
 cleanup() {
-  if git worktree list --porcelain | grep -qF "$wt"; then
+  # Local-worktree mode registers $wt as a git worktree; standalone mode
+  # leaves a throwaway repo directory. Handle both, and tolerate being run
+  # from outside any git repo.
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+     && git worktree list --porcelain | grep -qF "$wt"; then
     git worktree remove "$wt" --force
     git worktree prune
     echo "worktree removed: $wt"
+  elif [[ -e "$wt" ]]; then
+    rm -rf "$wt"
+    echo "pr checkout removed: $wt"
   else
-    echo "worktree already gone: $wt"
+    echo "pr checkout already gone: $wt"
   fi
   rm -f "/tmp/pr-${number}-view.json" "/tmp/pr-${number}-diff.txt" \
         "/tmp/pr-${number}-comments.json" "/tmp/pr-${number}-review.json" \

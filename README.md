@@ -10,8 +10,10 @@ personal tool: reviews post under your own GitHub account.
 A Claude Code *skill* is a packaged workflow you invoke with a slash command.
 `prr` turns "review this PR" into a repeatable process:
 
-- Checks the PR out into an **isolated git worktree** under `/tmp` — your
-  working tree and current branch are never touched.
+- Checks the PR out under `/tmp`, isolated from your work — a detached
+  **git worktree** when you run it inside the PR's repo, or a **standalone
+  checkout** fetched straight from GitHub when you do not have that repo
+  cloned locally. Your working tree and current branch are never touched.
 - Runs **two independent review passes**: a primary correctness and
   conventions review, and a security-focused pass by a separate agent
   (cross-tenant isolation, auth, secrets, error handling, blast radius,
@@ -23,7 +25,7 @@ A Claude Code *skill* is a packaged workflow you invoke with a slash command.
   line.
 - **Stops at an approval gate** — shows you every drafted comment and the
   proposed verdict, and posts nothing until you say yes.
-- Submits the review through the GitHub CLI and removes the worktree.
+- Submits the review through the GitHub CLI and removes the temporary checkout.
 
 ## Installing
 
@@ -46,19 +48,19 @@ That is all — `/prr` is now available in Claude Code.
 
 ## Using it
 
-From inside the target repository:
+With a full PR URL, from any directory:
 
 ```
 /prr https://github.com/owner/repo/pull/583
 ```
 
-or just `/prr 583`.
+Or, from inside the PR's own repository, just `/prr 583`.
 
 ## The workflow
 
 | Step | What happens |
 |------|--------------|
-| 1. Setup | Resolves the PR, creates the `/tmp/pr-<N>-wt` worktree, gathers the diff, description, and prior review threads. |
+| 1. Setup | Resolves the PR, checks it out under `/tmp/pr-<N>-wt` (local worktree, or standalone checkout if the repo is not cloned), gathers the diff, description, and prior review threads. |
 | 2. Dual-source review | Your primary review runs alongside a background security agent. |
 | 3. Synthesize | Findings merged, de-duplicated, ranked blocker / notable / nit. |
 | 4. Draft comments | One inline comment per finding; a verdict is chosen (APPROVE / REQUEST_CHANGES / COMMENT). |
@@ -86,8 +88,9 @@ invoke it.
   repo
 - **ripgrep (`rg`)** — recommended for code search; the skill falls back to
   `grep` if it is not installed
-- Run it from **inside the target git repository** — the skill uses
-  `git worktree`
+- A full PR URL works from **any directory** — the skill fetches the PR from
+  GitHub when you do not have the repo cloned. A bare PR number must be run
+  from inside the PR's own git repository.
 
 ## Bundle contents
 

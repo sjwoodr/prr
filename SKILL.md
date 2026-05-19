@@ -23,8 +23,10 @@ The approval gate in step 5 is hard: post nothing to GitHub until the user
 explicitly says yes. This is not the bundled `/review` skill.
 
 Two bundled scripts handle the deterministic mechanics (setup, posting,
-cleanup); the steps between them need judgment and stay manual. Run the
-skill from inside the target git repository — the scripts use `git worktree`.
+cleanup); the steps between them need judgment and stay manual. A full PR
+URL works from any directory — the setup script fetches the PR straight
+from GitHub when you do not have the repo cloned locally. A bare PR number
+must be run from inside the PR's own git repository.
 
 **Two modes.** Step 1 detects which one applies:
 
@@ -58,11 +60,14 @@ Run the bundled setup script with the PR reference from the skill argument:
 ~/.claude/skills/prr/scripts/setup-review.sh <PR-url-or-number>
 ```
 
-It resolves owner/repo/number, creates a detached worktree at
-`/tmp/pr-<N>-wt`, writes the review artifacts to `/tmp/`
+It resolves owner/repo/number and checks out the PR head at
+`/tmp/pr-<N>-wt` — a detached `git worktree` when you are inside the PR's
+repo, otherwise a standalone checkout fetched directly from GitHub (no
+local clone needed). It writes the review artifacts to `/tmp/`
 (`pr-<N>-view.json`, `pr-<N>-diff.txt`, `pr-<N>-comments.json`), and prints
-a `MODE:` line. In re-review mode it additionally writes
-`pr-<N>-prior-review.json` and `pr-<N>-since-diff.txt`.
+a `MODE:` line plus a `pr source:` line naming which path it used. In
+re-review mode it additionally writes `pr-<N>-prior-review.json` and
+`pr-<N>-since-diff.txt`.
 
 Then:
 - Read the `MODE:` line. If `MODE: re-review`, skip steps 2-6 and jump to
