@@ -90,7 +90,7 @@ fi
 
 # Detached PR head. pull/N/head works for fork PRs too; in standalone mode
 # origin is the PR's GitHub repo, so the same fetch works without a clone.
-"${fetch[@]}" "${depth[@]}" "pull/${number}/head"
+"${fetch[@]}" ${depth[@]+"${depth[@]}"} "pull/${number}/head"
 git -C "$wt" checkout -q FETCH_HEAD
 head_sha="$(git -C "$wt" rev-parse HEAD)"
 
@@ -138,9 +138,9 @@ if [[ -n "$prior" ]]; then
   # files this PR touches — a `main` merge into the branch between reviews
   # would otherwise flood the diff with unrelated changes.
   if [[ -n "$prior_sha" ]]; then
-    "${fetch[@]}" "${depth[@]}" "$prior_sha" 2>/dev/null || true
+    "${fetch[@]}" ${depth[@]+"${depth[@]}"} "$prior_sha" 2>/dev/null || true
     if git -C "$wt" cat-file -e "${prior_sha}^{commit}" 2>/dev/null; then
-      mapfile -t pr_files < <(jq -r '.files[].path' "$view")
+      IFS=$'\n' read -r -d '' -a pr_files < <(jq -r '.files[].path' "$view" && printf '\0')
       if [[ ${#pr_files[@]} -gt 0 ]]; then
         git -C "$wt" diff "${prior_sha}..HEAD" -- "${pr_files[@]}" > "$since_diff"
       else
