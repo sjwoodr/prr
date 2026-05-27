@@ -122,8 +122,17 @@ it makes yourself before trusting it.
   For a finding on a file not in the diff, anchor on the closest related
   line that is in the diff and name the real location in the body, or
   fall back to the review summary body.
-- Writing style: no em-dashes; never use the word "footgun"; inline
-  comments only, never a single rollup comment.
+- Writing style: plain ASCII only. No em-dashes (`—`), no arrows
+  (`→` `⇒` `←` `↔`), no special bullets (`•`), no ellipsis (`…`), no
+  curly quotes (`"` `"` `'` `'`). Use ASCII equivalents: regular hyphen,
+  comma, parens, colon, or split the sentence; `->` or words like
+  "becomes" / "now fixed" instead of `→`; `-` instead of `•`; `...`
+  instead of `…`; straight `"` / `'`. Never use the word "footgun".
+  Inline comments only, never a single rollup comment.
+- Self-check before posting: scan the drafted review body and every
+  inline comment for the banned characters above. If any appear,
+  rewrite. This is the only reliable enforcement, since the rule is
+  easy to break when copying structure from prior context.
 - Choose a verdict: `APPROVE` (no blockers), `REQUEST_CHANGES`, or
   `COMMENT`.
 
