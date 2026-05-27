@@ -77,6 +77,26 @@ Then:
 - Read the prior review state (`reviews` and `comments` in the view JSON,
   and `pr-<N>-comments.json` for inline threads). Note what other
   reviewers (e.g. Copilot) already raised so step 3 does not duplicate it.
+- **Linked ticket / issue context.** Scan the PR title and description
+  for a linked Jira ticket (e.g. `https://<site>.atlassian.net/browse/KEY-NNNN`
+  or a bare `KEY-NNNN` reference) or GitHub issue (`#NNNN`,
+  `owner/repo#NNNN`, full `https://github.com/owner/repo/issues/NNNN`).
+  If found, fetch its details and acceptance criteria so they frame what
+  "correct" looks like for this PR. Source A (your own pass) uses the
+  AC to check whether the PR actually does what it claims. Source B
+  (the security agent in step 2) is **not** given the ticket — a pure
+  security review should hunt for real issues regardless of stated
+  scope, and ticket framing could bias it toward "in scope, skip".
+  - **GitHub issue:** `gh issue view <num> --repo <owner/repo>` (read
+    the body + comments for AC).
+  - **Jira ticket:** use the Atlassian MCP `getJiraIssue` tool if
+    available. If no Atlassian MCP is configured, the tool is missing,
+    or the call fails for auth reasons, silently skip the fetch and
+    proceed without ticket context. Note the skip once in your console
+    output so the user knows the ticket was not read. Do **not** mention
+    the skip in any drafted review body or inline comment — that detail
+    belongs to the local workflow, not to the PR.
+  - If no ticket/issue is linked, skip this bullet without comment.
 - Keep the **head sha** the script prints — step 6 needs it for `commit_id`.
 - All file inspection happens inside `/tmp/pr-<N>-wt`. Never check the PR
   out in the main working tree.
