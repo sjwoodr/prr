@@ -28,6 +28,18 @@ URL works from any directory — the setup script fetches the PR straight
 from GitHub when you do not have the repo cloned locally. A bare PR number
 must be run from inside the PR's own git repository.
 
+**Script paths.** The two scripts live in this skill's own `scripts/`
+directory. Before running them, set `SKILL_DIR` to the absolute path of the
+directory that contains this `SKILL.md` (i.e. wherever this skill is
+installed — e.g. `~/.claude/skills/prr`, `~/.cursor/skills/prr`, or a
+project `.cursor/skills/prr`). Every command below invokes the scripts via
+`"$SKILL_DIR"/scripts/...`, so the skill runs the same regardless of where
+it was installed:
+
+```
+SKILL_DIR=<absolute path to the directory containing this SKILL.md>
+```
+
 **Two modes.** Step 1 detects which one applies:
 
 - **Full review** (steps 2-6) — the default: a fresh dual-source review.
@@ -57,7 +69,7 @@ Throughout this workflow:
 Run the bundled setup script with the PR reference from the skill argument:
 
 ```
-~/.claude/skills/prr/scripts/setup-review.sh <PR-url-or-number>
+"$SKILL_DIR"/scripts/setup-review.sh <PR-url-or-number>
 ```
 
 It resolves owner/repo/number and checks out the PR head at
@@ -148,6 +160,7 @@ it makes yourself before trusting it.
   comma, parens, colon, or split the sentence; `->` or words like
   "becomes" / "now fixed" instead of `→`; `-` instead of `•`; `...`
   instead of `…`; straight `"` / `'`. Never use the word "footgun".
+  Go out of your way to make your comments sound human, not AI responses. 
   Inline comments only, never a single rollup comment.
 - Self-check before posting: scan the drafted review body and every
   inline comment for the banned characters above. If any appear,
@@ -179,14 +192,14 @@ Then run the post script, which submits the review in one call and
 removes the worktree and temp artifacts:
 
 ```
-~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number> /tmp/pr-<N>-review.json
+"$SKILL_DIR"/scripts/post-review.sh <PR-url-or-number> /tmp/pr-<N>-review.json
 ```
 
 If the user declined to post, run it with no payload argument to clean
 up only:
 
 ```
-~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number>
+"$SKILL_DIR"/scripts/post-review.sh <PR-url-or-number>
 ```
 
 Confirm the worktree is removed and report the result.

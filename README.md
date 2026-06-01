@@ -1,4 +1,4 @@
-# prr — automated PR reviews (Claude Code skill)
+# prr — automated PR reviews (Claude Code & Cursor skill)
 
 `prr` is a [Claude Code](https://claude.com/claude-code) skill that runs a
 structured, two-pass review of a GitHub pull request and posts inline review
@@ -46,6 +46,32 @@ unzip prr.zip -d ~/.claude/skills/
 
 That is all — `/prr` is now available in Claude Code.
 
+### Cursor
+
+`prr` uses the portable `SKILL.md` Agent Skills format, so it also works in
+**Cursor** (2.4+). Cursor discovers skills in `~/.cursor/skills/`,
+`~/.agents/skills/`, and a project `.cursor/skills/` — and, for compatibility,
+in `~/.claude/skills/`, so an existing `~/.claude/skills/prr` install is picked
+up as-is with no changes. To install it specifically for Cursor instead:
+
+```bash
+git clone https://github.com/sjwoodr/prr ~/.cursor/skills/prr
+```
+
+Invoke it the same way: type `/` in Cursor's Agent chat and pick `prr`, or let
+it trigger automatically from the `description`. The bundled scripts are
+resolved via `$SKILL_DIR` (the skill's own directory), so they run correctly
+from whichever location Cursor loaded the skill.
+
+**Caveat — the security pass.** `prr` was designed around Claude Code running
+the security review as a **separate background agent** (the "dual-source" pass
+in step 2). How Cursor handles that second agent is **not yet verified** — it
+may run the security review inline within the single agent rather than as a
+true parallel sub-agent. The review still covers both the primary and security
+lenses; only the parallelism/isolation may differ. (The "this is not the
+bundled `/review` skill" line in `SKILL.md` refers to a Claude Code built-in
+and is harmless to ignore in Cursor.)
+
 ## Using it
 
 With a full PR URL, from any directory:
@@ -83,7 +109,8 @@ invoke it.
 
 ## Requirements
 
-- **Claude Code**
+- **Claude Code**, or **Cursor** (2.4+) — `prr` uses the portable `SKILL.md`
+  format both support (see [Cursor](#cursor) above for the sub-agent caveat)
 - **GitHub CLI (`gh`)**, authenticated against an account with access to the
   repo
 - **ripgrep (`rg`)** — recommended for code search; the skill falls back to
