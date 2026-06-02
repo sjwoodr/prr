@@ -6,7 +6,9 @@ description: >-
   GitHub review comments that are posted only after explicit user approval.
   Running it again on a PR you already reviewed does an incremental
   re-review — checking only whether your prior findings were addressed by the
-  commits pushed since. Use when the user runs /prr, asks to review a pull
+  commits pushed since. Reviewing your own PR is auto-detected as a
+  self-review: the same full fresh pass, but report-only with nothing posted
+  back to the PR. Use when the user runs /prr, asks to review a pull
   request, or provides a PR URL or number to review.
 ---
 
@@ -40,9 +42,14 @@ it was installed:
 SKILL_DIR=<absolute path to the directory containing this SKILL.md>
 ```
 
-**Two modes.** Step 1 detects which one applies:
+**Three modes.** Step 1 detects which one applies:
 
 - **Full review** (steps 2-6) — the default: a fresh dual-source review.
+- **Self-review** — runs when the PR author is you (your own PR). It does the
+  same full dual-source pass as a full review, but it is report-only: you
+  deliver the findings and verdict to the user and post nothing back to the
+  PR. Treat it as a zero-knowledge fresh look. See the report-only handling
+  in steps 5 and 6. Self-review takes precedence over re-review.
 - **Re-review** — runs instead when you have already posted a prr review on
   this PR. It skips the dual-source pass and only checks whether your prior
   findings were addressed by the commits pushed since the review. See the
@@ -83,7 +90,10 @@ re-review mode it additionally writes `pr-<N>-prior-review.json` and
 
 Then:
 - Read the `MODE:` line. If `MODE: re-review`, skip steps 2-6 and jump to
-  the **Re-review** section. If `MODE: full-review`, continue below.
+  the **Re-review** section. If `MODE: full-review`, continue below. If
+  `MODE: self-review`, also continue below (it runs as a full review), but
+  honour the report-only handling in steps 5 and 6 — you post nothing back
+  to the PR.
 - Read the diff, the PR description (`body` in the view JSON), and the
   changed-file list.
 - Read the prior review state (`reviews` and `comments` in the view JSON,
@@ -179,6 +189,11 @@ Show the user:
 Ask whether to post. Post nothing until the user explicitly approves.
 If the user wants edits, revise and ask again.
 
+**Self-review (`MODE: self-review`):** there is nothing to post, so this is a
+report, not a gate. Deliver the same ranked findings, the drafted comments
+(as your own notes), and the verdict directly to the user. Do not ask whether
+to post, and do not post — go straight to step 6 to clean up.
+
 ## 6. Post and clean up (only after approval)
 
 Build the review payload as a JSON file at `/tmp/pr-<N>-review.json`
@@ -197,6 +212,14 @@ removes the worktree and temp artifacts:
 
 If the user declined to post, run it with no payload argument to clean
 up only:
+
+```
+"$SKILL_DIR"/scripts/post-review.sh <PR-url-or-number>
+```
+
+**Self-review (`MODE: self-review`):** never build or post a payload. Always
+run the cleanup-only invocation (no payload argument) so nothing can reach
+the PR:
 
 ```
 "$SKILL_DIR"/scripts/post-review.sh <PR-url-or-number>

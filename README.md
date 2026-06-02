@@ -107,6 +107,15 @@ your earlier prr review and switches to an **incremental re-review**:
 To force a full fresh review of an already-reviewed PR, say so when you
 invoke it.
 
+## Self-review mode
+
+When the PR author is you, `prr` auto-detects a **self-review**. It runs the
+same full two-pass review as a normal run, but it is **report-only**: you get
+the ranked findings and a proposed verdict in the chat and nothing is posted
+back to the PR. (GitHub does not let you approve your own PR anyway, and the
+point is a fresh zero-knowledge read of your own work.) Self-review takes
+precedence over re-review.
+
 ## Requirements
 
 - **Claude Code**, or **Cursor** (2.4+) — `prr` uses the portable `SKILL.md`
@@ -127,7 +136,7 @@ prr/
 ├── README.md             # this file
 ├── LICENSE               # MIT license
 └── scripts/
-    ├── setup-review.sh   # worktree + artifacts + review/re-review detection
+    ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     └── post-review.sh    # submit the review and clean up
 ```
 

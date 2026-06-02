@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # setup-review.sh — prr skill step 1: resolve a PR, create an isolated
 # detached worktree, gather the review artifacts, and detect the mode:
-# a first review (full) or a re-review of a PR you already reviewed.
+# a full review, a self-review of your own PR (full pass, report-only), or
+# a re-review of a PR you already reviewed.
 #
 # Usage:  setup-review.sh <PR-url-or-number> [owner/repo]
 # A full PR URL works from any directory; a bare PR number must be run from
@@ -103,20 +104,33 @@ gh api --paginate "repos/${repo}/pulls/${number}/comments" > "$comments"
 gh api --paginate "repos/${repo}/pulls/${number}/reviews"  > "$reviews"
 
 # --- Mode detection ------------------------------------------------------
-# Re-review mode triggers when the current gh user already reviewed this PR.
-# Pick the latest of their reviews, preferring one tagged with the prr
-# marker; fall back to their latest review overall (prr reviews posted
-# before the marker existed have no tag).
+# Three modes, in precedence order:
+#   self-review — the PR author IS the current gh user (your own PR). Runs
+#     the full dual-source pass but is report-only; GitHub does not allow
+#     approving your own PR, and the intent is a fresh zero-knowledge look.
+#   re-review   — you already reviewed this PR. Pick the latest of your
+#     reviews, preferring one tagged with the prr marker; fall back to your
+#     latest review overall (prr reviews predating the marker have no tag).
+#   full-review — the default: a first, fresh review.
 me="$(gh api user --jq .login)"
-prior="$(jq -c --arg me "$me" '
-  [ .[] | select(.user.login == $me) ] as $mine
-  | ( ( [ $mine[] | select((.body // "") | contains("<!-- prr -->")) ] | last )
-      // ( $mine | last ) )
-  // empty
-' "$reviews")"
+pr_author="$(jq -r '.author.login // ""' "$view")"
 
 mode="full-review"
 commits_since="0"
+prior=""
+
+# Self-review wins over re-review; only look for a prior review otherwise.
+if [[ -n "$pr_author" && "$pr_author" == "$me" ]]; then
+  mode="self-review"
+else
+  prior="$(jq -c --arg me "$me" '
+    [ .[] | select(.user.login == $me) ] as $mine
+    | ( ( [ $mine[] | select((.body // "") | contains("<!-- prr -->")) ] | last )
+        // ( $mine | last ) )
+    // empty
+  ' "$reviews")"
+fi
+
 if [[ -n "$prior" ]]; then
   mode="re-review"
   review_id="$(jq -r .id <<<"$prior")"
@@ -186,5 +200,13 @@ re-review context:
   commits since:   $commits_since
   prior review:    $prior_json
   since-diff:      $since_diff
+EOF
+fi
+
+if [[ "$mode" == "self-review" ]]; then
+  cat <<EOF
+self-review context:
+  pr author:       $pr_author (you)
+  posting:         disabled — report findings to the user only, post nothing
 EOF
 fi
