@@ -227,6 +227,32 @@ the PR:
 
 Confirm the worktree is removed and report the result.
 
+### Optional: approval reaction on a chat post
+
+If your team announces each PR as a one-liner (with the GitHub pull URL) in a
+chat channel, `post-review.sh` drops a reaction on that post to signal the review
+outcome:
+
+- **APPROVE** -> `:white_check_mark:`
+- **COMMENT** or **REQUEST_CHANGES** -> `:speech_balloon:` (has feedback to read)
+- **Nothing posted** (gate declined, self-review, re-review report-only) -> no
+  reaction at all. The reaction only happens on the same path that posts a
+  review, so declining to post never touches the chat channel.
+
+Both are standard Slack emoji (no custom upload needed). This is fully opt-in and
+a no-op unless both environment variables are set:
+
+- `SLACK_BOT_TOKEN` — a Slack bot token with `reactions:write` plus history
+  access for the channel (`groups:history` for a private channel,
+  `channels:history` for a public one). The bot must be a member of the channel.
+- `PRR_CODE_REVIEWS_CHANNEL` — the channel ID to search (e.g. `C0XXXXXXX`).
+
+With neither set, prr behaves exactly as before. The reaction is added by the
+bot; multiple reactions are fine (one per reviewer), and the bot re-reacting to
+the same post with the same emoji is a harmless no-op. The step is best-effort: if
+the post is not found or Slack errors, it logs a note and does not fail the run
+(the review is already posted).
+
 ---
 
 # Re-review (incremental)

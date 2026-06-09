@@ -82,4 +82,16 @@ gh api "repos/${repo}/pulls/${number}/reviews" \
   --method POST --input "$marked" \
   --jq '"posted review id=\(.id) state=\(.state) url=\(.html_url)"'
 
+# Optional: react on the team's PR chat post to signal the review outcome. No-op
+# unless both SLACK_BOT_TOKEN and PRR_CODE_REVIEWS_CHANNEL are set. Approvals get
+# a check mark; a COMMENT or REQUEST_CHANGES gets a speech balloon ("has feedback
+# to read"). Best-effort: the review is already posted, so never let this abort.
+case "$event" in
+  APPROVE) react_emoji="white_check_mark" ;;
+  *)       react_emoji="speech_balloon" ;;
+esac
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$script_dir/slack_react.py" \
+  --repo "$repo" --number "$number" --emoji "$react_emoji" || true
+
 cleanup

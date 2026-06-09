@@ -91,7 +91,7 @@ Or, from inside the PR's own repository, just `/prr 583`.
 | 3. Synthesize | Findings merged, de-duplicated, ranked blocker / notable / nit. |
 | 4. Draft comments | One inline comment per finding; a verdict is chosen (APPROVE / REQUEST_CHANGES / COMMENT). |
 | 5. Approval gate | You see every comment verbatim and the verdict. Nothing is posted yet. |
-| 6. Post & clean up | On your approval, the review is submitted and the worktree removed. |
+| 6. Post & clean up | On your approval, the review is submitted and the worktree removed. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
 
 ## Re-review mode
 
@@ -116,6 +116,26 @@ back to the PR. (GitHub does not let you approve your own PR anyway, and the
 point is a fresh zero-knowledge read of your own work.) Self-review takes
 precedence over re-review.
 
+## Optional: chat reaction on the PR post
+
+If your team announces each PR in a chat channel (with the GitHub pull URL),
+`prr` can react on that post to mirror the review outcome:
+
+- APPROVE -> `:white_check_mark:`
+- COMMENT or REQUEST_CHANGES -> `:speech_balloon:`
+- nothing posted (gate declined, self-review, re-review report-only) -> no reaction
+
+It is fully opt-in and a no-op unless both of these are set in the environment:
+
+- `SLACK_BOT_TOKEN` — a Slack bot token with `reactions:write` and history
+  access for the channel (`groups:history` for a private channel,
+  `channels:history` for a public one); the bot must be a member of the channel
+- `PRR_CODE_REVIEWS_CHANNEL` — the channel ID to search (e.g. `C0XXXXXXX`)
+
+With neither set, behavior is unchanged. The step is best-effort: if the post is
+not found or the chat API errors, it logs a note and never fails the review that
+was already posted.
+
 ## Requirements
 
 - **Claude Code**, or **Cursor** (2.4+) — `prr` uses the portable `SKILL.md`
@@ -137,7 +157,8 @@ prr/
 ├── LICENSE               # MIT license
 └── scripts/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
-    └── post-review.sh    # submit the review and clean up
+    ├── post-review.sh    # submit the review and clean up
+    └── slack_react.py    # optional: react on the PR's chat post (opt-in via env)
 ```
 
 ## Good to know
