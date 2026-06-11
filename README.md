@@ -89,7 +89,7 @@ Or, from inside the PR's own repository, just `/prr 583`.
 | 1. Setup | Resolves the PR, checks it out under `/tmp/pr-<N>-wt` (local worktree, or standalone checkout if the repo is not cloned), gathers the diff, description, and prior review threads. |
 | 2. Dual-source review | Your primary review runs alongside a background security agent. |
 | 3. Synthesize | Findings merged, de-duplicated, ranked blocker / notable / nit. |
-| 4. Draft comments | One inline comment per finding; a verdict is chosen (APPROVE / REQUEST_CHANGES / COMMENT). |
+| 4. Draft comments | One inline comment per finding; when a fix is obvious and small, the comment carries a `suggestion` block so you can accept it with GitHub's "Commit suggestion" button. A verdict is chosen (APPROVE / REQUEST_CHANGES / COMMENT). |
 | 5. Approval gate | You see every comment verbatim and the verdict. Nothing is posted yet. |
 | 6. Post & clean up | On your approval, the review is submitted and the worktree removed. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
 

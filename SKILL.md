@@ -164,6 +164,31 @@ it makes yourself before trusting it.
   For a finding on a file not in the diff, anchor on the closest related
   line that is in the diff and name the real location in the body, or
   fall back to the review summary body.
+- **Suggested fix blocks.** When the fix is obvious and small, end the
+  comment body with a GitHub ` ```suggestion ` block so the author can
+  accept it with the "Commit suggestion" button. Only do this when all of
+  these hold; otherwise describe the fix in prose and skip the block:
+  - The fix is unambiguous - there is one clearly-correct replacement, not
+    a choice among options or something that needs the author's judgment.
+  - It is small: a single line or a short contiguous hunk, roughly 10 lines
+    or fewer. Above that, or if it spans non-adjacent regions, describe it
+    instead.
+  - It is self-contained: no new imports, helpers, or symbols defined
+    elsewhere, and no follow-on edits in other files needed to make it
+    compile or behave.
+  Mechanics that must be exact, since the block is a literal replacement:
+  - The suggestion replaces the comment's anchored line range verbatim.
+    For a single-line fix, anchor on that one line. For a multi-line fix,
+    make it a multi-line comment whose range (`start_line`..`line`, see
+    step 6) covers exactly the lines being replaced - no more, no less.
+    The replacement may contain a different number of lines than the range.
+  - Reproduce the original indentation exactly inside the block; GitHub
+    pastes it as-is.
+  - The anchored line(s) must be inside the PR diff, same as any inline
+    comment. A fix outside the diff cannot be a suggestion - describe it.
+  - The suggestion block holds real code and is exempt from the ASCII
+    prose rules below: write the code exactly as it must appear. The ASCII
+    rules still apply to the prose part of the comment.
 - Writing style: plain ASCII only. No em-dashes (`—`), no arrows
   (`→` `⇒` `←` `↔`), no special bullets (`•`), no ellipsis (`…`), no
   curly quotes (`"` `"` `'` `'`). Use ASCII equivalents: regular hyphen,
@@ -175,7 +200,9 @@ it makes yourself before trusting it.
 - Self-check before posting: scan the drafted review body and every
   inline comment for the banned characters above. If any appear,
   rewrite. This is the only reliable enforcement, since the rule is
-  easy to break when copying structure from prior context.
+  easy to break when copying structure from prior context. Exclude the
+  contents of any ` ```suggestion ` block from this check - that is
+  verbatim code, not prose.
 - Choose a verdict: `APPROVE` (no blockers), `REQUEST_CHANGES`, or
   `COMMENT`.
 
@@ -201,7 +228,10 @@ containing:
 - `commit_id` — the head sha from step 1
 - `event` — `APPROVE` / `REQUEST_CHANGES` / `COMMENT`
 - `body` — the review summary
-- `comments` — array of `{path, line, side, body}`
+- `comments` — array of `{path, line, side, body}`. For a multi-line
+  comment (needed when a `suggestion` block replaces more than one line,
+  see step 4), also set `start_line` and `start_side` so the range is
+  `start_line`..`line`; the suggestion replaces exactly that range.
 
 Then run the post script, which submits the review in one call and
 removes the worktree and temp artifacts:
