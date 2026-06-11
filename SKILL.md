@@ -70,6 +70,14 @@ Throughout this workflow:
   search in steps 2-4. If `rg` is not installed, fall back to `grep -rn` —
   scope it to the relevant files or directories and exclude `.git`
   (e.g. `--exclude-dir=.git`) so the search stays clean.
+- **Inspect files by absolute path — never `cd` into the worktree.** Prefer
+  the Read / Glob / Grep tools (or `rg`) pointed at the full
+  `/tmp/pr-<N>-wt/...` path. Do NOT use `cd /tmp/pr-<N>-wt/... && ls && cat`
+  style compound commands: Claude Code applies a built-in "compound command
+  contains `cd`" guard that forces a manual approval prompt on every such
+  call and is NOT silenceable via the permissions allow-list. Reading by
+  absolute path avoids the prompt entirely and Read gives line numbers for
+  the `file:line` citations step 3 needs.
 
 ## 1. Set up the review
 
