@@ -72,6 +72,39 @@ lenses; only the parallelism/isolation may differ. (The "this is not the
 bundled `/review` skill" line in `SKILL.md` refers to a Claude Code built-in
 and is harmless to ignore in Cursor.)
 
+## Claude Code: skip the approval prompts (optional)
+
+During a review Claude Code asks you to approve each helper-script run, the
+`tee` of the post log, and writing the review payload to `/tmp`. To
+pre-approve just those (scoped to the prr scripts and `/tmp`, nothing else),
+add them to your **user** settings allow-list. Requires `jq`; the command is
+idempotent, safe to re-run, and leaves any existing settings untouched:
+
+```bash
+mkdir -p ~/.claude
+F=~/.claude/settings.json
+[ -f "$F" ] || echo '{}' > "$F"
+TMP=$(mktemp)
+jq --arg h "$HOME" '
+  ([
+    "Bash(\($h)/.claude/skills/prr/scripts/setup-review.sh:*)",
+    "Bash(\($h)/.claude/skills/prr/scripts/post-review.sh:*)",
+    "Bash(\"$SKILL_DIR\"/scripts/setup-review.sh:*)",
+    "Bash(\"$SKILL_DIR\"/scripts/post-review.sh:*)",
+    "Bash(tee /tmp/:*)",
+    "Write(//tmp/**)"
+  ]) as $new
+  | .permissions.allow = ((.permissions.allow // []) + ($new - (.permissions.allow // [])))
+' "$F" > "$TMP" && mv "$TMP" "$F"
+jq '.permissions.allow' "$F"
+```
+
+Restart Claude Code if it does not pick the change up live. The scope is
+limited to the prr scripts, `tee` into `/tmp`, and writes under `/tmp`
+(throwaway space). The `$SKILL_DIR` rules are path-independent, so they work
+regardless of username; the absolute-path rules are belt-and-suspenders for
+the default `~/.claude/skills/prr` install location.
+
 ## Using it
 
 With a full PR URL, from any directory:
