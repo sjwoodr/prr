@@ -174,14 +174,55 @@ If your team announces each PR in a chat channel (with the GitHub pull URL),
 
 It is fully opt-in and a no-op unless both of these are set in the environment:
 
-- `SLACK_BOT_TOKEN` — a Slack bot token with `reactions:write` and history
-  access for the channel (`groups:history` for a private channel,
-  `channels:history` for a public one); the bot must be a member of the channel
+- `SLACK_BOT_TOKEN` — a Slack **user** OAuth token (`xoxp-...`). The env var
+  keeps this name, but the token is a user token so the reaction and threaded
+  reply appear as **you**, not a bot. It needs the user scopes `reactions:write`,
+  `chat:write`, and history access for the channel (`channels:history` for a
+  public channel, `groups:history` for a private one); the account that owns the
+  token must be a member of the channel. See
+  [Creating the Slack app](#creating-the-slack-app) below for the step-by-step.
 - `PRR_CODE_REVIEWS_CHANNEL` — the channel ID to search (e.g. `C0XXXXXXX`)
 
 With neither set, behavior is unchanged. The step is best-effort: if the post is
 not found or the chat API errors, it logs a note and never fails the review that
 was already posted.
+
+### Creating the Slack app
+
+The chat-reaction step talks to Slack with your own token, so the reaction and
+the threaded reply show up as **you**. Create a personal Slack app once and
+reuse its token:
+
+1. Go to **https://api.slack.com/apps** and click **Create New App -> From
+   scratch**. Give it a name (e.g. `prr`) and pick your workspace.
+2. Open **OAuth & Permissions** in the left sidebar.
+3. Under **User Token Scopes** (the *user* list, not *Bot* Token Scopes), add:
+   - `reactions:write` — add and remove the `:eyes:` / `:white_check_mark:` /
+     `:speech_balloon:` reactions
+   - `chat:write` — post the threaded reply
+   - `channels:history` — find the PR post in a public channel
+   - `groups:history` — same, for a private channel (skip if your channel is
+     public)
+4. Scroll up and click **Install to Workspace**, then authorize.
+   - **Workspace admin approval:** most workspaces restrict who can install
+     apps, so this will likely create a *pending request* rather than install
+     right away. Ask a Slack workspace admin/owner to approve it (they do this
+     under Slack settings -> Manage apps, or via the approval link Slack emails
+     them). The token is not issued until the app is approved and installed.
+5. Back on **OAuth & Permissions**, copy the **User OAuth Token** (it starts with
+   `xoxp-`).
+6. Make sure you are a **member of the channel** you announce PRs in (the token
+   can only read history and react where you are present). Copy its channel ID:
+   open the channel, click its name, and the ID (`C0XXXXXXX`) is at the bottom of
+   the details pane.
+7. Export both variables (add them to your shell profile to persist):
+
+   ```bash
+   export SLACK_BOT_TOKEN=xoxp-your-user-token
+   export PRR_CODE_REVIEWS_CHANNEL=C0XXXXXXX
+   ```
+
+That is it — the next `/prr` run signals progress on the matching PR post.
 
 ## Requirements
 

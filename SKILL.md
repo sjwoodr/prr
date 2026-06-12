@@ -306,17 +306,21 @@ chat channel, prr signals review progress on that post across the run:
 The reactions are standard Slack emoji (no custom upload needed). This is fully
 opt-in and a no-op unless both environment variables are set:
 
-- `SLACK_BOT_TOKEN` — a Slack bot token with `reactions:write`, `chat:write`
-  (for the threaded reply), plus history access for the channel
-  (`groups:history` for a private channel, `channels:history` for a public one).
-  The bot must be a member of the channel.
+- `SLACK_BOT_TOKEN` — a Slack **user** OAuth token (`xoxp-...`). The env var
+  keeps this name, but the token is a user token so the reaction and threaded
+  reply post as **you**, not a bot. It needs the user scopes `reactions:write`,
+  `chat:write` (for the threaded reply), plus history access for the channel
+  (`groups:history` for a private channel, `channels:history` for a public one),
+  and the account that owns the token must be a member of the channel. See the
+  README ("Creating the Slack app") for the step-by-step, including the likely
+  need for workspace-admin approval of the app install.
 - `PRR_CODE_REVIEWS_CHANNEL` — the channel ID to search (e.g. `C0XXXXXXX`).
 
-With neither set, prr behaves exactly as before. Reactions are added by the bot;
-multiple reactions are fine (one per reviewer), and the bot re-reacting (or
-re-removing) the same post is a harmless no-op. Every step is best-effort: if the
-post is not found or Slack errors, it logs a note and does not fail the run (the
-review is already posted).
+With neither set, prr behaves exactly as before. Reactions post as you;
+multiple reactions are fine (one per reviewer), and re-reacting (or re-removing)
+the same post is a harmless no-op. Every step is best-effort: if the post is not
+found or Slack errors, it logs a note and does not fail the run (the review is
+already posted).
 
 ---
 

@@ -20,7 +20,9 @@ Multiple flags may be combined in one call; they run in order unreact -> react
 
 This step is entirely OPT-IN via environment variables and is a no-op unless both
 are set:
-  SLACK_BOT_TOKEN          a Slack bot token with groups:history (or
+  SLACK_BOT_TOKEN          a Slack user OAuth token (xoxp-...; the env var keeps
+                           this name, but a user token posts as you, not a bot)
+                           with the user scopes groups:history (or
                            channels:history for a public channel),
                            reactions:write, and chat:write (for --reply)
   PRR_CODE_REVIEWS_CHANNEL the channel ID to search (e.g. C0XXXXXXX)
@@ -98,7 +100,7 @@ def _do_react(token, channel, ts, emoji):
     if r.get("ok"):
         print(f"slack: added :{emoji}: to the PR's chat post (ts {ts})")
     elif r.get("error") == "already_reacted":
-        print(f"slack: :{emoji}: already added by the bot (ts {ts}), no-op")
+        print(f"slack: :{emoji}: already added (ts {ts}), no-op")
     else:
         print(f"slack: reaction :{emoji}: failed ({r.get('error')}); add it manually if needed")
 
