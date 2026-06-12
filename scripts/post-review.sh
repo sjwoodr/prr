@@ -33,6 +33,18 @@ fi
 
 wt="/tmp/pr-${number}-wt"
 marked="/tmp/pr-${number}-review.posted.json"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Resolve the repo now so both the cleanup-only path and the post path can
+# address the team's PR chat post (to clear the :eyes: marker, etc.).
+[[ -z "$repo" ]] && repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+
+# Best-effort: drop the :eyes: "review in progress" marker setup-review.sh
+# added. No-op unless the Slack env vars are set or the post is found.
+clear_eyes() {
+  python3 "$script_dir/slack_react.py" \
+    --repo "$repo" --number "$number" --unreact eyes || true
+}
 
 cleanup() {
   # Local-worktree mode registers $wt as a git worktree; standalone mode
@@ -55,9 +67,11 @@ cleanup() {
         "/tmp/pr-${number}-since-diff.txt" "$marked"
 }
 
-# No payload: cleanup-only mode (e.g. the review was declined at the gate).
+# No payload: cleanup-only mode (declined gate, self-review, re-review report).
+# Nothing gets posted, so clear the in-progress :eyes: and tear down.
 if [[ -z "$payload" ]]; then
   echo "cleanup-only: no payload given, not posting a review"
+  clear_eyes
   cleanup
   exit 0
 fi
@@ -65,11 +79,14 @@ fi
 [[ -f "$payload" ]] || { echo "error: payload not found: $payload" >&2; exit 2; }
 jq empty "$payload" 2>/dev/null \
   || { echo "error: payload is not valid JSON: $payload" >&2; exit 2; }
-[[ -z "$repo" ]] && repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 
-# Append the prr marker to the body (idempotent) so future runs detect it.
-jq 'if ((.body // "") | contains("<!-- prr -->")) then .
-     else .body = ((.body // "") + "\n\n<!-- prr -->") end' \
+# Pull out the optional plain-language thread summary, then strip it from the
+# body posted to GitHub (the reviews endpoint should only see real review
+# fields). Append the prr marker (idempotent) so future runs detect this.
+slack_summary="$(jq -r '.slack_summary // empty' "$payload")"
+jq 'del(.slack_summary)
+    | if ((.body // "") | contains("<!-- prr -->")) then .
+      else .body = ((.body // "") + "\n\n<!-- prr -->") end' \
   "$payload" > "$marked"
 
 event="$(jq -r '.event // "COMMENT"' "$marked")"
@@ -82,16 +99,19 @@ gh api "repos/${repo}/pulls/${number}/reviews" \
   --method POST --input "$marked" \
   --jq '"posted review id=\(.id) state=\(.state) url=\(.html_url)"'
 
-# Optional: react on the team's PR chat post to signal the review outcome. No-op
-# unless both SLACK_BOT_TOKEN and PRR_CODE_REVIEWS_CHANNEL are set. Approvals get
-# a check mark; a COMMENT or REQUEST_CHANGES gets a speech balloon ("has feedback
-# to read"). Best-effort: the review is already posted, so never let this abort.
+# Optional: signal the review outcome on the team's PR chat post. No-op unless
+# both SLACK_BOT_TOKEN and PRR_CODE_REVIEWS_CHANNEL are set. We clear the
+# in-progress :eyes:, add an outcome reaction (check mark for an approval,
+# speech balloon for a COMMENT or REQUEST_CHANGES, "has feedback to read"), and
+# drop a short plain-language reply in the post's thread if the skill provided
+# one. Best-effort: the review is already posted, so never let this abort.
 case "$event" in
   APPROVE) react_emoji="white_check_mark" ;;
   *)       react_emoji="speech_balloon" ;;
 esac
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "$script_dir/slack_react.py" \
-  --repo "$repo" --number "$number" --emoji "$react_emoji" || true
+  --repo "$repo" --number "$number" \
+  --unreact eyes --react "$react_emoji" \
+  ${slack_summary:+--reply "$slack_summary"} || true
 
 cleanup

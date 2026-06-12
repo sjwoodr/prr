@@ -250,6 +250,16 @@ containing:
   comment (needed when a `suggestion` block replaces more than one line,
   see step 4), also set `start_line` and `start_side` so the range is
   `start_line`..`line`; the suggestion replaces exactly that range.
+- `slack_summary` — optional. A single short, plain, informal sentence
+  summarizing the action you took, used as the threaded reply on the team's
+  PR chat post (see the chat-post section below). Write it the way a person
+  would in chat, not like an AI: e.g. "Reviewed it, looks good, approved with
+  a couple of non-blocking nits." or "Took a look, left a few change requests
+  on the auth path." Follow the same plain-ASCII writing rules as step 4 (no
+  em-dashes, no curly quotes, never the word "footgun"). The field is stripped
+  from the body before the review is posted to GitHub; it only feeds Slack. If
+  the chat integration is not configured it is silently ignored, so it is safe
+  to always include.
 
 Then run the post script, which submits the review in one call and
 removes the worktree and temp artifacts:
@@ -275,31 +285,38 @@ the PR:
 
 Confirm the worktree is removed and report the result.
 
-### Optional: approval reaction on a chat post
+### Optional: progress signals on a chat post
 
 If your team announces each PR as a one-liner (with the GitHub pull URL) in a
-chat channel, `post-review.sh` drops a reaction on that post to signal the review
-outcome:
+chat channel, prr signals review progress on that post across the run:
 
-- **APPROVE** -> `:white_check_mark:`
-- **COMMENT** or **REQUEST_CHANGES** -> `:speech_balloon:` (has feedback to read)
-- **Nothing posted** (gate declined, self-review, re-review report-only) -> no
-  reaction at all. The reaction only happens on the same path that posts a
-  review, so declining to post never touches the chat channel.
+- **Review starts** (`setup-review.sh`) -> adds `:eyes:` to show a review is
+  underway. Skipped for self-review (your own PR posts nothing back, so there
+  is no review signal worth showing the team).
+- **Review is posted** (`post-review.sh` with a payload) -> removes the
+  `:eyes:`, adds an outcome reaction, and drops a one-line plain-language reply
+  in the post's thread (from `slack_summary` in the payload):
+  - **APPROVE** -> `:white_check_mark:`
+  - **COMMENT** or **REQUEST_CHANGES** -> `:speech_balloon:` (has feedback to read)
+- **Nothing posted** (gate declined, self-review, re-review report-only) ->
+  `post-review.sh` runs cleanup-only: it removes the `:eyes:` so the marker
+  never orphans, and adds no outcome reaction and no thread reply. Declining to
+  post never leaves a signal on the chat channel beyond clearing the marker.
 
-Both are standard Slack emoji (no custom upload needed). This is fully opt-in and
-a no-op unless both environment variables are set:
+The reactions are standard Slack emoji (no custom upload needed). This is fully
+opt-in and a no-op unless both environment variables are set:
 
-- `SLACK_BOT_TOKEN` — a Slack bot token with `reactions:write` plus history
-  access for the channel (`groups:history` for a private channel,
-  `channels:history` for a public one). The bot must be a member of the channel.
+- `SLACK_BOT_TOKEN` — a Slack bot token with `reactions:write`, `chat:write`
+  (for the threaded reply), plus history access for the channel
+  (`groups:history` for a private channel, `channels:history` for a public one).
+  The bot must be a member of the channel.
 - `PRR_CODE_REVIEWS_CHANNEL` — the channel ID to search (e.g. `C0XXXXXXX`).
 
-With neither set, prr behaves exactly as before. The reaction is added by the
-bot; multiple reactions are fine (one per reviewer), and the bot re-reacting to
-the same post with the same emoji is a harmless no-op. The step is best-effort: if
-the post is not found or Slack errors, it logs a note and does not fail the run
-(the review is already posted).
+With neither set, prr behaves exactly as before. Reactions are added by the bot;
+multiple reactions are fine (one per reviewer), and the bot re-reacting (or
+re-removing) the same post is a harmless no-op. Every step is best-effort: if the
+post is not found or Slack errors, it logs a note and does not fail the run (the
+review is already posted).
 
 ---
 

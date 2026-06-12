@@ -210,3 +210,15 @@ self-review context:
   posting:         disabled — report findings to the user only, post nothing
 EOF
 fi
+
+# Optional: mark the team's PR chat post with :eyes: to show a review has
+# started. No-op unless SLACK_BOT_TOKEN and PRR_CODE_REVIEWS_CHANNEL are set.
+# Removed again by post-review.sh once the review is posted or cleaned up.
+# Skipped for self-review: reviewing your own PR posts nothing back, so there
+# is no "someone is reviewing this" signal worth showing the team.
+# Best-effort: never let it abort setup.
+if [[ "$mode" != "self-review" ]]; then
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  python3 "$script_dir/slack_react.py" \
+    --repo "$repo" --number "$number" --react eyes || true
+fi
