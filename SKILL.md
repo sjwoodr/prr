@@ -78,6 +78,16 @@ Throughout this workflow:
   call and is NOT silenceable via the permissions allow-list. Reading by
   absolute path avoids the prompt entirely and Read gives line numbers for
   the `file:line` citations step 3 needs.
+- **Run the bundled scripts bare — never pipe them through `tee`.** Invoke
+  `setup-review.sh` and `post-review.sh` exactly as documented, with no
+  `2>&1 | tee /tmp/...` wrapper. Piping turns the call into a pipeline, and
+  Claude Code matches each pipeline segment against the allow-list
+  separately: the `tee` segment is not allow-listed, so the whole call
+  prompts even though the script itself is allowed. There is also nothing to
+  capture — both scripts already write their re-readable artifacts to `/tmp`
+  (`pr-<N>-view.json`, `pr-<N>-diff.txt`, `pr-<N>-comments.json`, and the
+  re-review extras), which is what the review consumes. The general "tee
+  output to /tmp" habit does not apply to these two scripts.
 
 ## 1. Set up the review
 

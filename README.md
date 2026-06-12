@@ -72,13 +72,14 @@ lenses; only the parallelism/isolation may differ. (The "this is not the
 bundled `/review` skill" line in `SKILL.md` refers to a Claude Code built-in
 and is harmless to ignore in Cursor.)
 
-## Claude Code: skip the approval prompts (optional)
+## Claude Code: skip the permission prompts (optional)
 
-During a review Claude Code asks you to approve each helper-script run, the
-`tee` of the post log, and writing the review payload to `/tmp`. To
-pre-approve just those (scoped to the prr scripts and `/tmp`, nothing else),
-add them to your **user** settings allow-list. Requires `jq`; the command is
-idempotent, safe to re-run, and leaves any existing settings untouched:
+During a review Claude Code asks you to approve two helper-script runs
+(`setup-review.sh`, `post-review.sh`) and the one file write of the review
+payload to `/tmp/pr-<N>-review.json`. To pre-approve just those (scoped to the
+prr scripts and that one payload path, nothing else), add them to your
+**user** settings allow-list. Requires `jq`; the command is idempotent, safe
+to re-run, and leaves any existing settings untouched:
 
 ```bash
 mkdir -p ~/.claude
@@ -91,8 +92,7 @@ jq --arg h "$HOME" '
     "Bash(\($h)/.claude/skills/prr/scripts/post-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/setup-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/post-review.sh:*)",
-    "Bash(tee /tmp/:*)",
-    "Write(//tmp/**)"
+    "Write(/tmp/pr-*-review.json)"
   ]) as $new
   | .permissions.allow = ((.permissions.allow // []) + ($new - (.permissions.allow // [])))
 ' "$F" > "$TMP" && mv "$TMP" "$F"
@@ -100,10 +100,24 @@ jq '.permissions.allow' "$F"
 ```
 
 Restart Claude Code if it does not pick the change up live. The scope is
-limited to the prr scripts, `tee` into `/tmp`, and writes under `/tmp`
-(throwaway space). The `$SKILL_DIR` rules are path-independent, so they work
-regardless of username; the absolute-path rules are belt-and-suspenders for
-the default `~/.claude/skills/prr` install location.
+limited to the prr scripts and the `pr-<N>-review.json` payload file under
+`/tmp` (throwaway space). The `$SKILL_DIR` rules are path-independent, so they
+work regardless of username; the absolute-path rules are belt-and-suspenders
+for the default `~/.claude/skills/prr` install location.
+
+Two notes:
+
+- Invoke the helper scripts **bare** - do not pipe them through `tee` or
+  redirect their output. A pipeline makes Claude Code match each segment of
+  the command separately, so the un-allow-listed `tee` (or redirect) segment
+  re-triggers a prompt even though the script itself is allowed. Both scripts
+  already write their re-readable artifacts to `/tmp`, so there is nothing to
+  capture. A path matcher with a leading double slash (e.g. `Write(//tmp/**)`)
+  silently fails to match `/tmp/...` - use single-slash absolute paths.
+- These rules only silence the **permission** prompts. The "post this review?"
+  question at the end of every review is a deliberate safety gate, not a
+  permission prompt - it cannot (and should not) be allow-listed away. prr
+  never writes to GitHub until you say so.
 
 ## Using it
 
