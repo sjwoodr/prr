@@ -149,16 +149,20 @@ depends only on the diff and worktree from step 1, so it has no reason to
 wait on Source A. Running it serially after your own review wastes wall
 time; the two passes must overlap.
 
-- **Source B** — one `codebase-analyst` agent doing a security-focused
-  deep pass: cross-tenant / isolation, auth, secrets, blast radius,
-  error handling, IAM and infrastructure permission changes, and test
-  gaps on security-relevant paths. Spawn it once, with
-  `run_in_background: true`, immediately after step 1. Give it the diff
-  path, the PR description, and the worktree path `/tmp/pr-<N>-wt` so it
-  can read surrounding code. A bare diff plus worktree is enough — do not
-  delay the spawn to hand-feed it findings or `file:line` pointers; the
-  agent explores on its own, and precise briefing is not worth
-  serializing the work behind your own review.
+- **Source B** — one agent doing a security-focused deep pass:
+  cross-tenant / isolation, auth, secrets, blast radius, error handling,
+  IAM and infrastructure permission changes, and test gaps on
+  security-relevant paths. Use the `codebase-analyst` agent type when it
+  is in this environment's available-agents list; if it is not (only the
+  built-ins are registered), fall back to `general-purpose`, which is
+  always available and can read and audit, not just locate code. Do not
+  use `Explore` for this — it only finds code, it does not review it.
+  Spawn it once, with `run_in_background: true`, immediately after step 1.
+  Give it the diff path, the PR description, and the worktree path
+  `/tmp/pr-<N>-wt` so it can read surrounding code. A bare diff plus
+  worktree is enough — do not delay the spawn to hand-feed it findings or
+  `file:line` pointers; the agent explores on its own, and precise
+  briefing is not worth serializing the work behind your own review.
 - **Source A** — your own primary review of the diff: correctness,
   project conventions, test coverage, and the obvious security surface.
   Do this while Source B runs in the background.
