@@ -101,8 +101,12 @@ numbers, e.g. `/prr 101 102 103`):
   finishes, which is a long human-paced wait:
 
   ```
-  PRR_TMUX_FANOUT=true "$SKILL_DIR"/scripts/prr-fanout.sh <PR> <PR> [<PR> ...]
+  "$SKILL_DIR"/scripts/prr-fanout.sh <PR> <PR> [<PR> ...]
   ```
+
+  Invoke it **bare** (no `PRR_TMUX_FANOUT=true` prefix, no pipe) — the flag is
+  already `true` in the environment when this gate fires, and a leading env
+  assignment or pipe would stop the permission allow-list from matching.
 
   It opens one terminal with a tiled tmux pane per PR, each pane running `/prr`
   on a single PR with the approval gate fully intact. It closes each pane as
