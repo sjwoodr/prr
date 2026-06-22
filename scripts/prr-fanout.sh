@@ -66,16 +66,12 @@ for r in "${refs[@]}"; do numbers+=("$(prnum "$r")"); done
 for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
 
 # --- pick a terminal ---------------------------------------------------------
-# macOS: iTerm2 if installed, else Terminal.app (PRR_FANOUT_TERMINAL = iterm|terminal).
-# Linux: tilix, gnome-terminal, x-terminal-emulator (the desktop default via
-# update-alternatives), xterm; PRR_FANOUT_TERMINAL forces a specific binary.
+# macOS: built-in Terminal.app by default; PRR_FANOUT_TERMINAL overrides it
+# (best-effort, see the spawn below). Linux: tilix, gnome-terminal,
+# x-terminal-emulator (the desktop default via update-alternatives), xterm;
+# PRR_FANOUT_TERMINAL forces a binary.
 if [[ "$os" == "Darwin" ]]; then
-  case "${PRR_FANOUT_TERMINAL:-}" in
-    iterm|iTerm)       term=iterm ;;
-    terminal|Terminal) term=terminal ;;
-    "") if [[ -d /Applications/iTerm.app || -d "$HOME/Applications/iTerm.app" ]]; then term=iterm; else term=terminal; fi ;;
-    *) echo "prr-fanout: PRR_FANOUT_TERMINAL='$PRR_FANOUT_TERMINAL' is not valid on macOS (use 'iterm' or 'terminal')." >&2; exit 3 ;;
-  esac
+  term="${PRR_FANOUT_TERMINAL:-Terminal}"
 else
   term=""
   for t in "${PRR_FANOUT_TERMINAL:-}" tilix gnome-terminal x-terminal-emulator xterm; do
@@ -107,38 +103,39 @@ done
 tmux set-option -t "$session" remain-on-exit off >/dev/null
 
 # Open ONE visible terminal attached to the session, sized to PRR_FANOUT_GEOMETRY
-# (COLSxROWS); tmux resizes the panes to fit on attach. macOS drives Terminal/
-# iTerm via AppleScript (no -e/--geometry there); Linux uses per-terminal flags
+# (COLSxROWS); tmux resizes the panes to fit on attach. macOS drives Terminal.app
+# via AppleScript (no -e/--geometry there); Linux uses per-terminal flags
 # (tilix/gnome-terminal --geometry=, xterm -geometry; others open default-sized).
 geo="${PRR_FANOUT_GEOMETRY:-160x50}"
 cols="${geo%%x*}"; rows="${geo##*x}"
 attach="tmux attach -t $session"
 if [[ "$os" == "Darwin" ]]; then
-  # The first run triggers a one-time macOS Automation permission prompt (allow
-  # this terminal/Claude to control iTerm/Terminal) — approve it once.
-  case "$term" in
-    iterm)
-      osascript \
-        -e 'tell application "iTerm"' \
-        -e '  set w to (create window with default profile)' \
-        -e '  tell current session of w' \
-        -e "    write text \"$attach\"" \
-        -e "    set columns to $cols" \
-        -e "    set rows to $rows" \
-        -e '  end tell' \
-        -e '  activate' \
-        -e 'end tell' >/dev/null 2>&1 &
-      ;;
-    terminal)
-      osascript \
-        -e 'tell application "Terminal"' \
-        -e "  do script \"$attach\"" \
-        -e "  set number of columns of front window to $cols" \
-        -e "  set number of rows of front window to $rows" \
-        -e '  activate' \
-        -e 'end tell' >/dev/null 2>&1 &
-      ;;
-  esac
+  # The first run triggers a one-time macOS Automation permission prompt — approve it.
+  if [[ "$term" == "Terminal" || "$term" == "terminal" ]]; then
+    # Built-in Terminal.app: do script + AppleScript geometry.
+    osascript \
+      -e 'tell application "Terminal"' \
+      -e "  do script \"$attach\"" \
+      -e "  set number of columns of front window to $cols" \
+      -e "  set number of rows of front window to $rows" \
+      -e '  activate' \
+      -e 'end tell' >/dev/null 2>&1 &
+  else
+    # PRR_FANOUT_TERMINAL override (best-effort): open the app on a throwaway
+    # .command that runs the attach, then attempt the same Terminal-style resize;
+    # if the app does not support it, carry on at its default size.
+    cmdfile="${TMPDIR:-/tmp}/prr-fanout-$$.command"
+    printf '#!/bin/sh\nexec %s\n' "$attach" > "$cmdfile"
+    chmod +x "$cmdfile"
+    open -a "$term" "$cmdfile" \
+      || echo "prr-fanout: could not open terminal '$term' (is it installed?)." >&2
+    osascript \
+      -e "tell application \"$term\"" \
+      -e "  set number of columns of front window to $cols" \
+      -e "  set number of rows of front window to $rows" \
+      -e '  activate' \
+      -e 'end tell' >/dev/null 2>&1 || true
+  fi
 else
   if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
   case "$term" in

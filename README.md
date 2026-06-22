@@ -176,22 +176,24 @@ Opt in (and tune) via environment:
   panes alone** (it prints the `tmux attach` command to finish them by hand).
 - `PRR_FANOUT_TERMINAL` — force the terminal, skipping detection. On **Linux**
   the auto-detection order is `tilix`, `gnome-terminal`, `x-terminal-emulator`
-  (the desktop default via `update-alternatives`), then `xterm`. On **macOS** it
-  picks **iTerm2** if installed, else **Terminal.app** (set this to `iterm` or
-  `terminal` to force one).
+  (the desktop default via `update-alternatives`), then `xterm`. On **macOS** the
+  default is the built-in **Terminal.app**; set this to another terminal app name
+  (e.g. `iTerm`, `Alacritty`) to override. The macOS override is best-effort: the
+  app is opened on the attach command and a Terminal-style resize is attempted,
+  but if the app ignores it the window just opens at its default size.
 - `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`; default
   `160x50`. Honored on `tilix`, `gnome-terminal`, `xterm`, and the macOS
-  terminals (set via AppleScript columns/rows); other Linux terminals open at
-  their default size. Bump it for big batches so the tiled panes stay readable
-  (e.g. `220x60` for a 3x3 grid of eight).
+  Terminal.app (via AppleScript columns/rows). Other Linux terminals, and an
+  overridden macOS terminal, open at their default size. Bump it for big batches
+  so the tiled panes stay readable (e.g. `220x60` for a 3x3 grid of eight).
 
 Notes: `gnome-terminal` runs its command in a background server, so depending on
 your profile's "When command exits" setting the window may linger after the
 panes close; `tilix` and `xterm` close cleanly. On **macOS** the first run
 triggers a one-time **Automation permission** prompt (allow controlling
-iTerm/Terminal) — approve it once — and whether the window auto-closes when the
-panes finish depends on the Terminal/iTerm profile's "when the shell exits"
-setting (the panes always close inside tmux regardless). Bare PR numbers must be
+Terminal, or your overridden app) — approve it once — and whether the window
+auto-closes when the panes finish depends on the terminal profile's "when the
+shell exits" setting (the panes always close inside tmux regardless). Bare PR numbers must be
 run from inside the PR's repo (as usual); full PR URLs work from anywhere.
 
 ## Re-review mode
