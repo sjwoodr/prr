@@ -101,6 +101,10 @@ for i in "${!refs[@]}"; do
   tmux select-layout -t "$session":reviews tiled >/dev/null
 done
 tmux set-option -t "$session" remain-on-exit off >/dev/null
+# Re-tile evenly whenever the window attaches or is resized, so manually resizing
+# the spawned window keeps the panes equal instead of leaving them lopsided.
+tmux set-hook -t "$session" client-resized  'select-layout tiled' >/dev/null 2>&1 || true
+tmux set-hook -t "$session" client-attached 'select-layout tiled' >/dev/null 2>&1 || true
 
 # Open ONE visible terminal attached to the session, sized to PRR_FANOUT_GEOMETRY
 # (COLSxROWS); tmux resizes the panes to fit on attach. macOS drives Terminal.app
@@ -110,32 +114,16 @@ geo="${PRR_FANOUT_GEOMETRY:-160x50}"
 cols="${geo%%x*}"; rows="${geo##*x}"
 attach="tmux attach -t $session"
 if [[ "$os" == "Darwin" ]]; then
-  # The first run triggers a one-time macOS Automation permission prompt — approve it.
-  if [[ "$term" == "Terminal" || "$term" == "terminal" ]]; then
-    # Built-in Terminal.app: do script + AppleScript geometry.
-    osascript \
-      -e 'tell application "Terminal"' \
-      -e "  do script \"$attach\"" \
-      -e "  set number of columns of front window to $cols" \
-      -e "  set number of rows of front window to $rows" \
-      -e '  activate' \
-      -e 'end tell' >/dev/null 2>&1 &
-  else
-    # PRR_FANOUT_TERMINAL override (best-effort): open the app on a throwaway
-    # .command that runs the attach, then attempt the same Terminal-style resize;
-    # if the app does not support it, carry on at its default size.
-    cmdfile="${TMPDIR:-/tmp}/prr-fanout-$$.command"
-    printf '#!/bin/sh\nexec %s\n' "$attach" > "$cmdfile"
-    chmod +x "$cmdfile"
-    open -a "$term" "$cmdfile" \
-      || echo "prr-fanout: could not open terminal '$term' (is it installed?)." >&2
-    osascript \
-      -e "tell application \"$term\"" \
-      -e "  set number of columns of front window to $cols" \
-      -e "  set number of rows of front window to $rows" \
-      -e '  activate' \
-      -e 'end tell' >/dev/null 2>&1 || true
-  fi
+  # Open the terminal on a throwaway .command that first resizes itself via the
+  # xterm "CSI 8 ; rows ; cols t" escape (honored by Terminal.app and most
+  # terminals) and then attaches. `open -a` is terminal-agnostic and needs no
+  # Automation permission; if an app ignores the resize it opens default-sized,
+  # and the client-resized hook still keeps the panes evenly tiled once it settles.
+  cmdfile="${TMPDIR:-/tmp}/prr-fanout-$$.command"
+  printf '#!/bin/sh\nprintf "\\033[8;%s;%st"\nexec %s\n' "$rows" "$cols" "$attach" > "$cmdfile"
+  chmod +x "$cmdfile"
+  open -a "$term" "$cmdfile" \
+    || echo "prr-fanout: could not open terminal '$term' (is it installed?)." >&2
 else
   if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
   case "$term" in
