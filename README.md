@@ -140,6 +140,50 @@ Or, from inside the PR's own repository, just `/prr 583`.
 | 5. Approval gate | You see every comment verbatim and the verdict. Nothing is posted yet. |
 | 6. Post & clean up | On your approval, the review is submitted and the worktree removed. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
 
+## Parallel multi-PR review (`PRR_TMUX_FANOUT`)
+
+Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and
+`prr` can fan them out into a grid of interactive sessions:
+
+```
+/prr 101 102 103 104
+```
+
+When `PRR_TMUX_FANOUT=true`, a multi-PR run opens **one terminal** with a tiled
+**tmux** pane per PR, each pane running `/prr` on a single PR. You review and
+**approve each post in its own pane** — the approval gate is never bypassed.
+As each review finishes, its pane closes itself; when the last one closes, the
+terminal closes and you get a consolidated rollup back in the original session.
+
+The wait between approvals is a plain shell sleep loop, so an idle batch (you
+walked away) costs **no tokens** — only the active reviews do.
+
+**This assumes a graphical session (X11 / Xwayland or Wayland)**, because the
+panes have to be visible for you to approve them. Over SSH or headless, or when
+`tmux` is not installed, the flag is ignored and the PRs are reviewed **one at a
+time** instead (the normal single-PR flow per PR). A single-PR run ignores the
+flag entirely.
+
+Opt in (and tune) via environment:
+
+- `PRR_TMUX_FANOUT` — set to `true` to enable the tmux fan-out for multi-PR runs.
+- `PRR_FANOUT_TIMEOUT_MINS` — global wall-clock cap on the run; default `240`
+  (4h). `0` disables the cap (safe, since waiting is token-free). On timeout the
+  launcher stops, reports which PRs are still open, and **leaves your in-progress
+  panes alone** (it prints the `tmux attach` command to finish them by hand).
+- `PRR_FANOUT_TERMINAL` — force a specific terminal binary, skipping detection.
+  Auto-detection order is `tilix`, `gnome-terminal`, `x-terminal-emulator`
+  (the desktop's default via `update-alternatives`), then `xterm`.
+- `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`; default
+  `160x50`. Applies to `tilix`, `gnome-terminal`, and `xterm` (other terminals
+  open at their default size). Bump it for big batches so the tiled panes stay
+  readable (e.g. `220x60` for a 3x3 grid of eight).
+
+Note: `gnome-terminal` runs its command in a background server, so depending on
+your profile's "When command exits" setting the window may linger after the
+panes close; `tilix` and `xterm` close cleanly. Bare PR numbers must be run from
+inside the PR's repo (as usual); full PR URLs work from anywhere.
+
 ## Re-review mode
 
 When a PR author pushes fixes, run `/prr` on the same PR again. It detects
@@ -235,6 +279,9 @@ That is it — the next `/prr` run signals progress on the matching PR post.
 - A full PR URL works from **any directory** — the skill fetches the PR from
   GitHub when you do not have the repo cloned. A bare PR number must be run
   from inside the PR's own git repository.
+- **tmux** and a **graphical session** (X11/Xwayland or Wayland) — optional,
+  only for the parallel multi-PR fan-out (`PRR_TMUX_FANOUT`). Without them,
+  multi-PR runs review sequentially instead.
 
 ## Bundle contents
 
@@ -246,6 +293,7 @@ prr/
 └── scripts/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
+    ├── prr-fanout.sh     # optional: parallel multi-PR review in tmux panes (PRR_TMUX_FANOUT)
     └── slack_react.py    # optional: react on the PR's chat post (opt-in via env)
 ```
 

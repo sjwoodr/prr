@@ -46,6 +46,16 @@ clear_eyes() {
     --repo "$repo" --number "$number" --unreact eyes || true
 }
 
+# Fan-out mode: when this review runs inside a prr-fanout.sh tmux pane
+# (PRR_FANOUT_PANE set), drop a one-line result file that the launcher polls to
+# learn this PR is done and close its pane. Keyed on the PR number so the
+# launcher finds it. No-op outside fan-out.
+write_fanout_result() {
+  [[ -n "${PRR_FANOUT_PANE:-}" ]] || return 0
+  printf 'pr=%s status=%s event=%s comments=%s\n' \
+    "$number" "$1" "${2:-none}" "${3:-0}" > "/tmp/prr-fanout-${number}.result"
+}
+
 cleanup() {
   # Local-worktree mode registers $wt as a git worktree; standalone mode
   # leaves a throwaway repo directory. Handle both, and tolerate being run
@@ -72,6 +82,7 @@ cleanup() {
 if [[ -z "$payload" ]]; then
   echo "cleanup-only: no payload given, not posting a review"
   clear_eyes
+  write_fanout_result not-posted
   cleanup
   exit 0
 fi
@@ -113,5 +124,7 @@ python3 "$script_dir/slack_react.py" \
   --repo "$repo" --number "$number" \
   --unreact eyes --react "$react_emoji" \
   ${slack_summary:+--reply "$slack_summary"} || true
+
+write_fanout_result posted "$event" "$ncomments"
 
 cleanup

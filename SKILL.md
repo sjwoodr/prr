@@ -89,6 +89,33 @@ Throughout this workflow:
   re-review extras), which is what the review consumes. The general "tee
   output to /tmp" habit does not apply to these two scripts.
 
+## 0. Multi-PR fan-out (optional)
+
+If the skill argument names **more than one PR** (space-separated URLs or
+numbers, e.g. `/prr 101 102 103`):
+
+- **If `PRR_TMUX_FANOUT=true` AND a GUI session is present (`DISPLAY` or
+  `WAYLAND_DISPLAY` set) AND `tmux` is on PATH** — hand the whole batch to the
+  fan-out launcher and do not review the PRs yourself. Run it **in the
+  background** (`run_in_background: true`); it blocks until every review
+  finishes, which is a long human-paced wait:
+
+  ```
+  PRR_TMUX_FANOUT=true "$SKILL_DIR"/scripts/prr-fanout.sh <PR> <PR> [<PR> ...]
+  ```
+
+  It opens one terminal with a tiled tmux pane per PR, each pane running `/prr`
+  on a single PR with the approval gate fully intact. It closes each pane as
+  that PR's review finishes (it watches the result file `post-review.sh` writes),
+  then prints a consolidated rollup. Do **not** run steps 1-6 for the batch
+  yourself. When the background launcher exits, relay its rollup to the user.
+
+- **Otherwise** (flag unset, no GUI, or no tmux) — fall back to reviewing the
+  PRs **one at a time**: run the normal single-PR flow (steps 1-6) for the first
+  PR, then the next, and so on. Never block on a missing GUI/tmux.
+
+If the argument names a single PR, ignore this section and start at step 1.
+
 ## 1. Set up the review
 
 Run the bundled setup script with the PR reference from the skill argument:

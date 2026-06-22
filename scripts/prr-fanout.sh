@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# prr-fanout.sh — prr skill: review several PRs in parallel, each in its own
+# interactive Claude session in a tiled tmux pane, with the human approval gate
+# fully intact.
+#
+# Opt-in via PRR_TMUX_FANOUT=true. Assumes a GUI session (X11/Xwayland or
+# Wayland) because the panes must be VISIBLE for you to approve each post; over
+# SSH/headless this refuses and the skill falls back to sequential review.
+#
+# Usage (run in the BACKGROUND from the skill — it blocks until every review
+# finishes, which is a human-paced wait):
+#   PRR_TMUX_FANOUT=true prr-fanout.sh <PR-url-or-number> <PR-url-or-number> ...
+#
+# Lifecycle:
+#   1. Open ONE terminal running tmux with one tiled pane per PR, each pane
+#      running `claude "/prr <ref>"` with PRR_FANOUT_PANE=1 set.
+#   2. Poll for each PR's /tmp/prr-fanout-<number>.result file (written by
+#      post-review.sh when that PR's review finishes — posted, declined, or
+#      self-review), closing each pane as its result lands. The poll is a pure
+#      shell sleep loop: it costs CPU only, never tokens, so an idle wait is free.
+#   3. When all PRs are accounted for (result file, or pane/session gone), print
+#      a consolidated rollup and exit. The terminal closes itself when tmux ends.
+#
+# Config (env):
+#   PRR_TMUX_FANOUT          must be "true" to run (else refuse with exit 3)
+#   PRR_FANOUT_TIMEOUT_MINS  global wall-clock cap; default 240 (4h); 0 = no cap
+#   PRR_FANOUT_TERMINAL      force a terminal binary, skipping auto-detection
+#
+# Author: Steve Woodruff (@sjwoodr)
+# SPDX-License-Identifier: MIT
+set -euo pipefail
+
+# --- guards: opt-in, enough PRs, GUI session, tmux + claude present -----------
+[[ "${PRR_TMUX_FANOUT:-}" == "true" ]] \
+  || { echo "prr-fanout: PRR_TMUX_FANOUT is not 'true'; not fanning out." >&2; exit 3; }
+[[ $# -ge 2 ]] \
+  || { echo "prr-fanout: need 2+ PRs to fan out (got $#)." >&2; exit 3; }
+[[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]] \
+  || { echo "prr-fanout: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open panes." >&2; exit 3; }
+command -v tmux   >/dev/null 2>&1 || { echo "prr-fanout: tmux not on PATH." >&2;   exit 3; }
+command -v claude >/dev/null 2>&1 || { echo "prr-fanout: claude not on PATH." >&2; exit 3; }
+
+timeout_mins="${PRR_FANOUT_TIMEOUT_MINS:-240}"
+
+# --- parse each ref to a PR number (same rule as setup/post-review.sh) --------
+prnum() {
+  if [[ "$1" =~ ^https://github\.com/[^/]+/[^/]+/pull/([0-9]+) ]]; then
+    echo "${BASH_REMATCH[1]}"
+  elif [[ "$1" =~ ^[0-9]+$ ]]; then
+    echo "$1"
+  else
+    echo "prr-fanout: '$1' is neither a PR URL nor a number." >&2; return 2
+  fi
+}
+
+refs=("$@")
+numbers=()
+for r in "${refs[@]}"; do numbers+=("$(prnum "$r")"); done
+
+# Clear any stale result files from a previous run so we do not read them as done.
+for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
+
+# --- pick a terminal + the flag it uses to run a command ---------------------
+# Order: tilix, gnome-terminal, x-terminal-emulator (the desktop's default via
+# update-alternatives), xterm. PRR_FANOUT_TERMINAL overrides. gnome-terminal
+# runs a command with `-- CMD`; the others use `-e "CMD"`.
+term=""
+for t in "${PRR_FANOUT_TERMINAL:-}" tilix gnome-terminal x-terminal-emulator xterm; do
+  [[ -n "$t" ]] && command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
+done
+[[ -n "$term" ]] \
+  || { echo "prr-fanout: no supported terminal (tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
+
+session="prr-fanout-$$"
+
+pane_cmd() {  # $1 = PR ref -> the command string a pane runs
+  printf 'PRR_FANOUT_PANE=1 claude "/prr %s"' "$1"
+}
+
+# Build the session detached with a large virtual size so tiling many panes does
+# not hit "no space for new pane"; it resizes to the real terminal on attach.
+# -c "$PWD" so bare-number PRs resolve against the repo you launched from.
+declare -A pane_of=()
+first_pane="$(tmux new-session -d -s "$session" -n reviews -x 250 -y 60 -c "$PWD" \
+              -P -F '#{pane_id}' "$(pane_cmd "${refs[0]}")")"
+pane_of["${numbers[0]}"]="$first_pane"
+for i in "${!refs[@]}"; do
+  (( i == 0 )) && continue
+  p="$(tmux split-window -t "$session":reviews -c "$PWD" -P -F '#{pane_id}' "$(pane_cmd "${refs[$i]}")")"
+  pane_of["${numbers[$i]}"]="$p"
+  tmux select-layout -t "$session":reviews tiled >/dev/null
+done
+tmux set-option -t "$session" remain-on-exit off >/dev/null
+
+# Open ONE visible terminal attached to the session. setsid so it outlives this
+# script; backgrounded so we proceed to the poll loop. The window is sized to
+# PRR_FANOUT_GEOMETRY (COLSxROWS); tmux resizes the panes to fit it on attach.
+# Geometry flag differs per terminal (tilix/gnome-terminal use --geometry=,
+# xterm uses -geometry); terminals we cannot map (e.g. x-terminal-emulator)
+# open at their default size rather than risk a bad flag aborting the launch.
+if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
+geo="${PRR_FANOUT_GEOMETRY:-160x50}"
+case "$term" in
+  tilix)          "${SP[@]}" "$term" --geometry="$geo" -e "tmux attach -t $session" >/dev/null 2>&1 & ;;
+  gnome-terminal) "${SP[@]}" "$term" --geometry="$geo" -- tmux attach -t "$session" >/dev/null 2>&1 & ;;
+  xterm)          "${SP[@]}" "$term" -geometry "$geo"  -e "tmux attach -t $session" >/dev/null 2>&1 & ;;
+  *)              "${SP[@]}" "$term" -e "tmux attach -t $session"                    >/dev/null 2>&1 & ;;
+esac
+
+echo "prr-fanout: launched ${#refs[@]} reviews in tmux session '$session' via $term"
+echo "prr-fanout: PRs: ${numbers[*]}"
+echo "prr-fanout: attach manually any time with: tmux attach -t $session"
+echo "prr-fanout: timeout=${timeout_mins}m (0=none); waiting for reviews to finish..."
+
+# --- poll loop (pure shell sleep; no tokens) ---------------------------------
+declare -A done_map=()
+deadline=$(( $(date +%s) + timeout_mins * 60 ))
+
+remaining() {
+  local out=()
+  for n in "${numbers[@]}"; do [[ -n "${done_map[$n]:-}" ]] || out+=("$n"); done
+  echo "${out[*]}"
+}
+
+while :; do
+  if [[ "$timeout_mins" -ne 0 && "$(date +%s)" -ge "$deadline" ]]; then
+    echo "prr-fanout: TIMEOUT after ${timeout_mins}m; still open: $(remaining)" >&2
+    break
+  fi
+  tmux has-session -t "$session" 2>/dev/null \
+    || { echo "prr-fanout: tmux session ended (panes all closed)."; break; }
+
+  for n in "${numbers[@]}"; do
+    [[ -n "${done_map[$n]:-}" ]] && continue
+    rf="/tmp/prr-fanout-${n}.result"
+    if [[ -f "$rf" ]]; then
+      done_map[$n]="$(cat "$rf")"
+      rm -f "$rf"
+      [[ -n "${pane_of[$n]:-}" ]] && tmux kill-pane -t "${pane_of[$n]}" 2>/dev/null || true
+      tmux select-layout -t "$session":reviews tiled >/dev/null 2>&1 || true
+      echo "prr-fanout: done #$n -> ${done_map[$n]}"
+    fi
+  done
+
+  [[ -z "$(remaining)" ]] && { echo "prr-fanout: all reviews complete."; break; }
+  sleep 5
+done
+
+# --- rollup ------------------------------------------------------------------
+echo
+echo "===== prr-fanout rollup ====="
+for n in "${numbers[@]}"; do
+  if [[ -n "${done_map[$n]:-}" ]]; then
+    echo "  #$n  ${done_map[$n]}"
+  else
+    echo "  #$n  (no result — still open or aborted)"
+  fi
+done
+
+if [[ -z "$(remaining)" ]]; then
+  tmux kill-session -t "$session" 2>/dev/null || true
+else
+  echo "prr-fanout: left open panes in place; reattach to finish: tmux attach -t $session"
+fi
