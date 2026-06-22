@@ -35,8 +35,13 @@ set -euo pipefail
   || { echo "prr-fanout: PRR_TMUX_FANOUT is not 'true'; not fanning out." >&2; exit 3; }
 [[ $# -ge 2 ]] \
   || { echo "prr-fanout: need 2+ PRs to fan out (got $#)." >&2; exit 3; }
-[[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]] \
-  || { echo "prr-fanout: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open panes." >&2; exit 3; }
+os="$(uname)"
+# macOS (Aqua) has no DISPLAY; a desktop GUI is assumed present. On Linux require
+# an X11/Wayland session, since the panes must be visible to approve them.
+if [[ "$os" != "Darwin" ]]; then
+  [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]] \
+    || { echo "prr-fanout: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open panes." >&2; exit 3; }
+fi
 command -v tmux   >/dev/null 2>&1 || { echo "prr-fanout: tmux not on PATH." >&2;   exit 3; }
 command -v claude >/dev/null 2>&1 || { echo "prr-fanout: claude not on PATH." >&2; exit 3; }
 
@@ -60,16 +65,25 @@ for r in "${refs[@]}"; do numbers+=("$(prnum "$r")"); done
 # Clear any stale result files from a previous run so we do not read them as done.
 for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
 
-# --- pick a terminal + the flag it uses to run a command ---------------------
-# Order: tilix, gnome-terminal, x-terminal-emulator (the desktop's default via
-# update-alternatives), xterm. PRR_FANOUT_TERMINAL overrides. gnome-terminal
-# runs a command with `-- CMD`; the others use `-e "CMD"`.
-term=""
-for t in "${PRR_FANOUT_TERMINAL:-}" tilix gnome-terminal x-terminal-emulator xterm; do
-  [[ -n "$t" ]] && command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
-done
-[[ -n "$term" ]] \
-  || { echo "prr-fanout: no supported terminal (tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
+# --- pick a terminal ---------------------------------------------------------
+# macOS: iTerm2 if installed, else Terminal.app (PRR_FANOUT_TERMINAL = iterm|terminal).
+# Linux: tilix, gnome-terminal, x-terminal-emulator (the desktop default via
+# update-alternatives), xterm; PRR_FANOUT_TERMINAL forces a specific binary.
+if [[ "$os" == "Darwin" ]]; then
+  case "${PRR_FANOUT_TERMINAL:-}" in
+    iterm|iTerm)       term=iterm ;;
+    terminal|Terminal) term=terminal ;;
+    "") if [[ -d /Applications/iTerm.app || -d "$HOME/Applications/iTerm.app" ]]; then term=iterm; else term=terminal; fi ;;
+    *) echo "prr-fanout: PRR_FANOUT_TERMINAL='$PRR_FANOUT_TERMINAL' is not valid on macOS (use 'iterm' or 'terminal')." >&2; exit 3 ;;
+  esac
+else
+  term=""
+  for t in "${PRR_FANOUT_TERMINAL:-}" tilix gnome-terminal x-terminal-emulator xterm; do
+    [[ -n "$t" ]] && command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
+  done
+  [[ -n "$term" ]] \
+    || { echo "prr-fanout: no supported terminal (tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
+fi
 
 session="prr-fanout-$$"
 
@@ -92,20 +106,48 @@ for i in "${!refs[@]}"; do
 done
 tmux set-option -t "$session" remain-on-exit off >/dev/null
 
-# Open ONE visible terminal attached to the session. setsid so it outlives this
-# script; backgrounded so we proceed to the poll loop. The window is sized to
-# PRR_FANOUT_GEOMETRY (COLSxROWS); tmux resizes the panes to fit it on attach.
-# Geometry flag differs per terminal (tilix/gnome-terminal use --geometry=,
-# xterm uses -geometry); terminals we cannot map (e.g. x-terminal-emulator)
-# open at their default size rather than risk a bad flag aborting the launch.
-if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
+# Open ONE visible terminal attached to the session, sized to PRR_FANOUT_GEOMETRY
+# (COLSxROWS); tmux resizes the panes to fit on attach. macOS drives Terminal/
+# iTerm via AppleScript (no -e/--geometry there); Linux uses per-terminal flags
+# (tilix/gnome-terminal --geometry=, xterm -geometry; others open default-sized).
 geo="${PRR_FANOUT_GEOMETRY:-160x50}"
-case "$term" in
-  tilix)          "${SP[@]}" "$term" --geometry="$geo" -e "tmux attach -t $session" >/dev/null 2>&1 & ;;
-  gnome-terminal) "${SP[@]}" "$term" --geometry="$geo" -- tmux attach -t "$session" >/dev/null 2>&1 & ;;
-  xterm)          "${SP[@]}" "$term" -geometry "$geo"  -e "tmux attach -t $session" >/dev/null 2>&1 & ;;
-  *)              "${SP[@]}" "$term" -e "tmux attach -t $session"                    >/dev/null 2>&1 & ;;
-esac
+cols="${geo%%x*}"; rows="${geo##*x}"
+attach="tmux attach -t $session"
+if [[ "$os" == "Darwin" ]]; then
+  # The first run triggers a one-time macOS Automation permission prompt (allow
+  # this terminal/Claude to control iTerm/Terminal) — approve it once.
+  case "$term" in
+    iterm)
+      osascript \
+        -e 'tell application "iTerm"' \
+        -e '  set w to (create window with default profile)' \
+        -e '  tell current session of w' \
+        -e "    write text \"$attach\"" \
+        -e "    set columns to $cols" \
+        -e "    set rows to $rows" \
+        -e '  end tell' \
+        -e '  activate' \
+        -e 'end tell' >/dev/null 2>&1 &
+      ;;
+    terminal)
+      osascript \
+        -e 'tell application "Terminal"' \
+        -e "  do script \"$attach\"" \
+        -e "  set number of columns of front window to $cols" \
+        -e "  set number of rows of front window to $rows" \
+        -e '  activate' \
+        -e 'end tell' >/dev/null 2>&1 &
+      ;;
+  esac
+else
+  if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
+  case "$term" in
+    tilix)          "${SP[@]}" "$term" --geometry="$geo" -e "$attach"                >/dev/null 2>&1 & ;;
+    gnome-terminal) "${SP[@]}" "$term" --geometry="$geo" -- tmux attach -t "$session" >/dev/null 2>&1 & ;;
+    xterm)          "${SP[@]}" "$term" -geometry "$geo"  -e "$attach"                >/dev/null 2>&1 & ;;
+    *)              "${SP[@]}" "$term" -e "$attach"                                   >/dev/null 2>&1 & ;;
+  esac
+fi
 
 echo "prr-fanout: launched ${#refs[@]} reviews in tmux session '$session' via $term"
 echo "prr-fanout: PRs: ${numbers[*]}"

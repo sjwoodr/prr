@@ -94,9 +94,10 @@ Throughout this workflow:
 If the skill argument names **more than one PR** (space-separated URLs or
 numbers, e.g. `/prr 101 102 103`):
 
-- **If `PRR_TMUX_FANOUT=true` AND a GUI session is present (`DISPLAY` or
-  `WAYLAND_DISPLAY` set) AND `tmux` is on PATH** — hand the whole batch to the
-  fan-out launcher and do not review the PRs yourself. Run it **in the
+- **If `PRR_TMUX_FANOUT=true` AND `tmux` is on PATH AND a graphical desktop is
+  available** — on Linux that means `DISPLAY` or `WAYLAND_DISPLAY` is set; on
+  macOS (`uname` = `Darwin`) it always is — hand the whole batch to the fan-out
+  launcher and do not review the PRs yourself. Run it **in the
   background** (`run_in_background: true`); it blocks until every review
   finishes, which is a long human-paced wait:
 

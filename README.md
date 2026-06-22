@@ -161,11 +161,11 @@ terminal closes and you get a consolidated rollup back in the original session.
 The wait between approvals is a plain shell sleep loop, so an idle batch (you
 walked away) costs **no tokens** — only the active reviews do.
 
-**This assumes a graphical session (X11 / Xwayland or Wayland)**, because the
-panes have to be visible for you to approve them. Over SSH or headless, or when
-`tmux` is not installed, the flag is ignored and the PRs are reviewed **one at a
-time** instead (the normal single-PR flow per PR). A single-PR run ignores the
-flag entirely.
+**This assumes a graphical desktop session** (Linux X11/Xwayland or Wayland, or
+macOS), because the panes have to be visible for you to approve them. Over SSH
+or headless, or when `tmux` is not installed, the flag is ignored and the PRs
+are reviewed **one at a time** instead (the normal single-PR flow per PR). A
+single-PR run ignores the flag entirely.
 
 Opt in (and tune) via environment:
 
@@ -174,18 +174,25 @@ Opt in (and tune) via environment:
   (4h). `0` disables the cap (safe, since waiting is token-free). On timeout the
   launcher stops, reports which PRs are still open, and **leaves your in-progress
   panes alone** (it prints the `tmux attach` command to finish them by hand).
-- `PRR_FANOUT_TERMINAL` — force a specific terminal binary, skipping detection.
-  Auto-detection order is `tilix`, `gnome-terminal`, `x-terminal-emulator`
-  (the desktop's default via `update-alternatives`), then `xterm`.
+- `PRR_FANOUT_TERMINAL` — force the terminal, skipping detection. On **Linux**
+  the auto-detection order is `tilix`, `gnome-terminal`, `x-terminal-emulator`
+  (the desktop default via `update-alternatives`), then `xterm`. On **macOS** it
+  picks **iTerm2** if installed, else **Terminal.app** (set this to `iterm` or
+  `terminal` to force one).
 - `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`; default
-  `160x50`. Applies to `tilix`, `gnome-terminal`, and `xterm` (other terminals
-  open at their default size). Bump it for big batches so the tiled panes stay
-  readable (e.g. `220x60` for a 3x3 grid of eight).
+  `160x50`. Honored on `tilix`, `gnome-terminal`, `xterm`, and the macOS
+  terminals (set via AppleScript columns/rows); other Linux terminals open at
+  their default size. Bump it for big batches so the tiled panes stay readable
+  (e.g. `220x60` for a 3x3 grid of eight).
 
-Note: `gnome-terminal` runs its command in a background server, so depending on
+Notes: `gnome-terminal` runs its command in a background server, so depending on
 your profile's "When command exits" setting the window may linger after the
-panes close; `tilix` and `xterm` close cleanly. Bare PR numbers must be run from
-inside the PR's repo (as usual); full PR URLs work from anywhere.
+panes close; `tilix` and `xterm` close cleanly. On **macOS** the first run
+triggers a one-time **Automation permission** prompt (allow controlling
+iTerm/Terminal) — approve it once — and whether the window auto-closes when the
+panes finish depends on the Terminal/iTerm profile's "when the shell exits"
+setting (the panes always close inside tmux regardless). Bare PR numbers must be
+run from inside the PR's repo (as usual); full PR URLs work from anywhere.
 
 ## Re-review mode
 
@@ -282,9 +289,9 @@ That is it — the next `/prr` run signals progress on the matching PR post.
 - A full PR URL works from **any directory** — the skill fetches the PR from
   GitHub when you do not have the repo cloned. A bare PR number must be run
   from inside the PR's own git repository.
-- **tmux** and a **graphical session** (X11/Xwayland or Wayland) — optional,
-  only for the parallel multi-PR fan-out (`PRR_TMUX_FANOUT`). Without them,
-  multi-PR runs review sequentially instead.
+- **tmux** and a **graphical desktop session** (Linux X11/Xwayland or Wayland,
+  or macOS) — optional, only for the parallel multi-PR fan-out
+  (`PRR_TMUX_FANOUT`). Without them, multi-PR runs review sequentially instead.
 
 ## Bundle contents
 
