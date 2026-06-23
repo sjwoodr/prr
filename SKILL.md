@@ -91,6 +91,17 @@ Throughout this workflow:
 
 ## 0. Multi-PR fan-out (optional)
 
+**Test mode.** If the first argument is `test-mode` (e.g. `/prr test-mode 1 2 3
+4 5 6`), this is a no-Claude smoke test of the fan-out plumbing. Launch it **in
+the background** and relay the rollup; do not review anything yourself. It needs
+`tmux` + a graphical desktop but ignores `PRR_TMUX_FANOUT` (it is an explicit
+test). Each pane mocks a review by writing its own result file, so it exercises
+spawn → tile → detect → close → rollup without invoking Claude:
+
+```
+"$SKILL_DIR"/scripts/prr-fanout.sh test-mode <N> <N> [<N> ...]
+```
+
 If the skill argument names **more than one PR** (space-separated URLs or
 numbers, e.g. `/prr 101 102 103`):
 

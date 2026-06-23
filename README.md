@@ -197,6 +197,13 @@ auto-closes when the panes finish depends on the Terminal profile's "when the
 shell exits" setting (the panes always close inside tmux regardless). Bare PR numbers must be
 run from inside the PR's repo (as usual); full PR URLs work from anywhere.
 
+**Smoke-testing the fan-out.** `/prr test-mode <N> <N> ...` (e.g. `/prr test-mode
+1 2 3 4 5 6`) runs the whole launcher **without invoking Claude**: it opens the
+tiled window and each pane mocks a review by writing its result file (staggered,
+so panes close one by one), letting you verify the terminal spawn, layout,
+sizing, pane-close, and rollup quickly. It needs tmux + a desktop session but
+ignores `PRR_TMUX_FANOUT` (it is an explicit test).
+
 ## Re-review mode
 
 When a PR author pushes fixes, run `/prr` on the same PR again. It detects

@@ -30,8 +30,15 @@
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
-# --- guards: opt-in, enough PRs, GUI session, tmux + claude present -----------
-[[ "${PRR_TMUX_FANOUT:-}" == "true" ]] \
+# --- test mode + guards ------------------------------------------------------
+# `test-mode` as the first arg runs a no-Claude smoke test of the plumbing: each
+# pane mocks a review by writing its own result file (no claude invoked), so you
+# can exercise spawn -> tile -> detect -> close -> rollup quickly. It bypasses the
+# PRR_TMUX_FANOUT flag and the claude check, but still needs tmux + a GUI.
+TEST=0
+if [[ "${1:-}" == "test-mode" ]]; then TEST=1; shift; fi
+
+[[ "$TEST" -eq 1 || "${PRR_TMUX_FANOUT:-}" == "true" ]] \
   || { echo "prr-fanout: PRR_TMUX_FANOUT is not 'true'; not fanning out." >&2; exit 3; }
 [[ $# -ge 2 ]] \
   || { echo "prr-fanout: need 2+ PRs to fan out (got $#)." >&2; exit 3; }
@@ -42,8 +49,9 @@ if [[ "$os" != "Darwin" ]]; then
   [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]] \
     || { echo "prr-fanout: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open panes." >&2; exit 3; }
 fi
-command -v tmux   >/dev/null 2>&1 || { echo "prr-fanout: tmux not on PATH." >&2;   exit 3; }
-command -v claude >/dev/null 2>&1 || { echo "prr-fanout: claude not on PATH." >&2; exit 3; }
+command -v tmux >/dev/null 2>&1 || { echo "prr-fanout: tmux not on PATH." >&2; exit 3; }
+[[ "$TEST" -eq 1 ]] || command -v claude >/dev/null 2>&1 \
+  || { echo "prr-fanout: claude not on PATH." >&2; exit 3; }
 
 timeout_mins="${PRR_FANOUT_TIMEOUT_MINS:-240}"
 
@@ -83,8 +91,17 @@ fi
 
 session="prr-fanout-$$"
 
-pane_cmd() {  # $1 = PR ref -> the command string a pane runs
-  printf 'PRR_FANOUT_PANE=1 claude "/prr %s"' "$1"
+pane_cmd() {  # $1 = PR ref, $2 = index -> the command string a pane runs
+  local ref="$1" idx="$2"
+  if [[ "$TEST" -eq 1 ]]; then
+    # Mock a review: banner, a staggered wait (so panes close one by one), then
+    # write the result file the launcher polls, then idle until it kills the pane.
+    local n="${numbers[$idx]}" delay=$(( 3 + idx * 2 ))
+    printf 'echo "[TEST MODE] mock review of PR %s; finishing in %ss"; sleep %s; echo "pr=%s status=test comments=%s" > /tmp/prr-fanout-%s.result; echo "[TEST MODE] PR %s result written; waiting for launcher to close this pane"; sleep 600' \
+      "$n" "$delay" "$delay" "$n" "$idx" "$n" "$n"
+  else
+    printf 'PRR_FANOUT_PANE=1 claude "/prr %s"' "$ref"
+  fi
 }
 
 # Build the session detached with a large virtual size so tiling many panes does
@@ -92,11 +109,11 @@ pane_cmd() {  # $1 = PR ref -> the command string a pane runs
 # -c "$PWD" so bare-number PRs resolve against the repo you launched from.
 declare -A pane_of=()
 first_pane="$(tmux new-session -d -s "$session" -n reviews -x 250 -y 60 -c "$PWD" \
-              -P -F '#{pane_id}' "$(pane_cmd "${refs[0]}")")"
+              -P -F '#{pane_id}' "$(pane_cmd "${refs[0]}" 0)")"
 pane_of["${numbers[0]}"]="$first_pane"
 for i in "${!refs[@]}"; do
   (( i == 0 )) && continue
-  p="$(tmux split-window -t "$session":reviews -c "$PWD" -P -F '#{pane_id}' "$(pane_cmd "${refs[$i]}")")"
+  p="$(tmux split-window -t "$session":reviews -c "$PWD" -P -F '#{pane_id}' "$(pane_cmd "${refs[$i]}" "$i")")"
   pane_of["${numbers[$i]}"]="$p"
   tmux select-layout -t "$session":reviews tiled >/dev/null
 done
@@ -134,6 +151,7 @@ else
   esac
 fi
 
+[[ "$TEST" -eq 1 ]] && echo "prr-fanout: *** TEST MODE *** mocking reviews, no Claude invoked"
 echo "prr-fanout: launched ${#refs[@]} reviews in tmux session '$session' via $term"
 echo "prr-fanout: PRs: ${numbers[*]}"
 echo "prr-fanout: attach manually any time with: tmux attach -t $session"
