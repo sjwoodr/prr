@@ -192,13 +192,19 @@ Opt in (and tune) via environment:
 
 Notes: `gnome-terminal` runs its command in a background server, so depending on
 your profile's "When command exits" setting the window may linger after the
-panes close; `tilix` and `xterm` close cleanly. On **macOS** (Terminal.app) the
-spawned window closes itself when the panes finish (otherwise it would linger on
-"[Process completed]") — the self-close uses AppleScript, so the first run shows
-a one-time **Automation permission** prompt; approve it. It is best-effort: if
-denied, or if you forced a different terminal, the window may stay open, but the
-panes always close inside tmux regardless. Bare PR numbers must be run from
-inside the PR's repo (as usual); full PR URLs work from anywhere.
+panes close; `tilix` and `xterm` close cleanly. On **macOS** Terminal.app leaves
+the spawned window on "[Process completed]" when the panes finish (the panes
+always close inside tmux regardless). To have it close automatically, set
+Terminal's shell-exit action once, then relaunch Terminal:
+
+```bash
+defaults write com.apple.Terminal ShellExitAction -int 1   # 1 = close if clean; 2 = always close
+```
+
+If that key does not take on your macOS version, set it in the GUI instead:
+Terminal → Settings → Profiles → Shell → "When the shell exits" → "Close the
+window". Bare PR numbers must be run from inside the PR's repo (as usual); full
+PR URLs work from anywhere.
 
 **Smoke-testing the fan-out.** `/prr test-mode <N> <N> ...` (e.g. `/prr test-mode
 1 2 3 4 5 6`) runs the whole launcher **without invoking Claude**: it opens the
