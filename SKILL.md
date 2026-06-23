@@ -30,17 +30,24 @@ URL works from any directory — the setup script fetches the PR straight
 from GitHub when you do not have the repo cloned locally. A bare PR number
 must be run from inside the PR's own git repository.
 
-**Script paths.** The two scripts live in this skill's own `scripts/`
-directory. Before running them, set `SKILL_DIR` to the absolute path of the
-directory that contains this `SKILL.md` (i.e. wherever this skill is
-installed — e.g. `~/.claude/skills/prr`, `~/.cursor/skills/prr`, or a
-project `.cursor/skills/prr`). Every command below invokes the scripts via
-`"$SKILL_DIR"/scripts/...`, so the skill runs the same regardless of where
-it was installed:
+**Script paths.** The scripts live under **this skill's own base
+directory** — the absolute path shown at the very top of this skill prompt
+(e.g. `Base directory for this skill: ...`). Their `scripts/` subdirectory
+holds `setup-review.sh`, `post-review.sh`, and `prr-fanout.sh`. Invoke each
+one **by its absolute path as a single bare statement** — no `cd`, no
+`export`, no leading variable assignment, no pipe. A compound command
+(`cd …; export …; …/script`) or a leading `VAR=… …/script` prefix cannot be
+statically analyzed, so Claude Code's permission allow-list never matches it
+and you get an approval prompt every run; a single bare
+`<base-dir>/scripts/<script>.sh …` matches the allow-list and runs
+unprompted. The scripts self-locate their own siblings, so no environment
+setup is needed.
 
-```
-SKILL_DIR=<absolute path to the directory containing this SKILL.md>
-```
+The command examples below are written for the default Claude Code install
+location, `~/.claude/skills/prr`. If the base directory at the top of this
+prompt is different (e.g. a Cursor install at `~/.cursor/skills/prr`, or a
+project-local `.cursor/skills/prr`), use that path instead of
+`~/.claude/skills/prr` in every command below — the rest is identical.
 
 **Three modes.** Step 1 detects which one applies:
 
@@ -99,7 +106,7 @@ test). Each pane mocks a review by writing its own result file, so it exercises
 spawn → tile → detect → close → rollup without invoking Claude:
 
 ```
-"$SKILL_DIR"/scripts/prr-fanout.sh test-mode <N> <N> [<N> ...]
+~/.claude/skills/prr/scripts/prr-fanout.sh test-mode <N> <N> [<N> ...]
 ```
 
 If the skill argument names **more than one PR** (space-separated URLs or
@@ -113,7 +120,7 @@ numbers, e.g. `/prr 101 102 103`):
   finishes, which is a long human-paced wait:
 
   ```
-  "$SKILL_DIR"/scripts/prr-fanout.sh <PR> <PR> [<PR> ...]
+  ~/.claude/skills/prr/scripts/prr-fanout.sh <PR> <PR> [<PR> ...]
   ```
 
   Invoke it **bare** (no `PRR_TMUX_FANOUT=true` prefix, no pipe) — the flag is
@@ -137,7 +144,7 @@ If the argument names a single PR, ignore this section and start at step 1.
 Run the bundled setup script with the PR reference from the skill argument:
 
 ```
-"$SKILL_DIR"/scripts/setup-review.sh <PR-url-or-number>
+~/.claude/skills/prr/scripts/setup-review.sh <PR-url-or-number>
 ```
 
 It resolves owner/repo/number and checks out the PR head at
@@ -312,14 +319,14 @@ Then run the post script, which submits the review in one call and
 removes the worktree and temp artifacts:
 
 ```
-"$SKILL_DIR"/scripts/post-review.sh <PR-url-or-number> /tmp/pr-<N>-review.json
+~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number> /tmp/pr-<N>-review.json
 ```
 
 If the user declined to post, run it with no payload argument to clean
 up only:
 
 ```
-"$SKILL_DIR"/scripts/post-review.sh <PR-url-or-number>
+~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number>
 ```
 
 **Self-review (`MODE: self-review`):** never build or post a payload. Always
@@ -327,7 +334,7 @@ run the cleanup-only invocation (no payload argument) so nothing can reach
 the PR:
 
 ```
-"$SKILL_DIR"/scripts/post-review.sh <PR-url-or-number>
+~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number>
 ```
 
 Confirm the worktree is removed and report the result.

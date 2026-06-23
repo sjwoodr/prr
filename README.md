@@ -92,6 +92,9 @@ jq --arg h "$HOME" '
     "Bash(\($h)/.claude/skills/prr/scripts/setup-review.sh:*)",
     "Bash(\($h)/.claude/skills/prr/scripts/post-review.sh:*)",
     "Bash(\($h)/.claude/skills/prr/scripts/prr-fanout.sh:*)",
+    "Bash(~/.claude/skills/prr/scripts/setup-review.sh:*)",
+    "Bash(~/.claude/skills/prr/scripts/post-review.sh:*)",
+    "Bash(~/.claude/skills/prr/scripts/prr-fanout.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/setup-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/post-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/prr-fanout.sh:*)",
@@ -104,9 +107,14 @@ jq '.permissions.allow' "$F"
 
 Restart Claude Code if it does not pick the change up live. The scope is
 limited to the prr scripts and the `pr-<N>-review.json` payload file under
-`/tmp` (throwaway space). The `$SKILL_DIR` rules are path-independent, so they
-work regardless of username; the absolute-path rules are belt-and-suspenders
-for the default `~/.claude/skills/prr` install location.
+`/tmp` (throwaway space). Three rule forms are installed because Claude Code's
+permission matcher compares the command string literally — it does not expand
+`~`, `$HOME`, or `$SKILL_DIR` before matching, so a rule only fires when its
+form matches how the command is written. SKILL.md invokes the scripts via the
+`~/.claude/skills/prr/...` form, so the tilde rules are the ones that normally
+match; the fully-expanded absolute-path rules and the path-independent
+`$SKILL_DIR` rules are belt-and-suspenders for the default install location and
+for any custom invocation that uses those forms instead.
 
 Two notes:
 
