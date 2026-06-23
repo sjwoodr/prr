@@ -131,13 +131,34 @@ geo="${PRR_FANOUT_GEOMETRY:-160x50}"
 cols="${geo%%x*}"; rows="${geo##*x}"
 attach="tmux attach -t $session"
 if [[ "$os" == "Darwin" ]]; then
-  # Open the terminal on a throwaway .command that first resizes itself via the
-  # xterm "CSI 8 ; rows ; cols t" escape (honored by Terminal.app and most
-  # terminals) and then attaches. `open -a` is terminal-agnostic and needs no
-  # Automation permission; if an app ignores the resize it opens default-sized,
-  # and the client-resized hook still keeps the panes evenly tiled once it settles.
+  # Open the terminal on a throwaway .command that (1) self-resizes via the xterm
+  # "CSI 8 ; rows ; cols t" escape (honored by Terminal.app), (2) attaches, and
+  # (3) once tmux ends, closes its own Terminal.app window (matched by tty) so it
+  # doesn't linger on "[Process completed]". `open -a` needs no Automation perms;
+  # the self-close does (one-time prompt) and is best-effort. It's gated to
+  # Apple_Terminal so an overridden terminal never accidentally launches Terminal.
   cmdfile="${TMPDIR:-/tmp}/prr-fanout-$$.command"
-  printf '#!/bin/sh\nprintf "\\033[8;%s;%st"\nexec %s\n' "$rows" "$cols" "$attach" > "$cmdfile"
+  cat > "$cmdfile" <<EOF
+#!/bin/sh
+printf '\033[8;${rows};${cols}t'
+export PRR_FANOUT_TTY="\$(tty)"
+tmux attach -t ${session}
+if [ "\$TERM_PROGRAM" = "Apple_Terminal" ]; then
+  osascript >/dev/null 2>&1 <<'OSA' || true
+tell application "Terminal"
+  set tt to (system attribute "PRR_FANOUT_TTY")
+  repeat with w in windows
+    repeat with t in tabs of w
+      if tty of t is tt then
+        close w saving no
+        return
+      end if
+    end repeat
+  end repeat
+end tell
+OSA
+fi
+EOF
   chmod +x "$cmdfile"
   open -a "$term" "$cmdfile" \
     || echo "prr-fanout: could not open terminal '$term' (is it installed?)." >&2
