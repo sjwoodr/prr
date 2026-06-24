@@ -7,8 +7,13 @@
 # Why a separate backend: tmux gives a free auto-tiling grid and cross-terminal
 # portability, which is why it remains the default. This variant exists for the
 # wezterm daily-driver: it drops the tmux layer and drives wezterm directly via
-# `wezterm cli`. Selected only when PRR_FANOUT_NATIVE=true AND wezterm is present
-# (see the dispatch shim at the top of prr-fanout.sh); otherwise nothing changes.
+# `wezterm cli`. Selected by the prr-fanout.sh router when PRR_FANOUT=wezterm.
+#
+# Linux-only — NOT because wezterm is (it runs fine on macOS), but because this
+# backend's launch + isolation mechanics are: it detaches the gui with `setsid`
+# (absent on macOS) and finds the new instance's socket under the XDG runtime dir
+# (`$XDG_RUNTIME_DIR/wezterm`; macOS uses a different location). On macOS the tmux
+# backend drives wezterm perfectly well, so that path covers it.
 #
 # How it stays off the user's own wezterm windows: it starts its OWN gui instance
 # (`wezterm start --class prr-fanout-<pid> --always-new-process`) and addresses it
@@ -23,12 +28,12 @@
 # grid goes a little ragged. These runs last minutes, so survivors just getting
 # bigger is fine — and not re-tiling avoids yanking panes around under the reader.
 #
-# Usage (run in the BACKGROUND from the skill; it blocks until every review ends):
-#   PRR_FANOUT_NATIVE=true prr-fanout-wezterm.sh <PR-url-or-number> ...
+# Usage (normally via the prr-fanout.sh router; blocks until every review ends):
+#   PRR_FANOUT=wezterm prr-fanout-wezterm.sh <PR-url-or-number> ...
 #   prr-fanout-wezterm.sh test-mode <N> <N> ...   # no-Claude plumbing smoke test
 #
 # Config (env):
-#   PRR_FANOUT_NATIVE        must be "true" to run (test-mode bypasses it)
+#   PRR_FANOUT               must be "wezterm" (the router sets this); test-mode bypasses it
 #   PRR_FANOUT_TIMEOUT_MINS  global wall-clock cap; default 240 (4h); 0 = no cap
 #   PRR_FANOUT_GEOMETRY      initial window size COLSxROWS; default 160x50
 #
@@ -38,19 +43,21 @@ set -euo pipefail
 
 # --- test mode + guards ------------------------------------------------------
 # `test-mode` mocks each review (no Claude) so spawn -> tile -> detect -> close
-# -> rollup can be exercised quickly; it bypasses the opt-in flag and the claude
-# check but still needs wezterm + a GUI.
+# -> rollup can be exercised quickly; it bypasses the selection gate and the
+# claude check but still needs wezterm + a GUI.
 TEST=0
 if [[ "${1:-}" == "test-mode" ]]; then TEST=1; shift; fi
 
-[[ "$TEST" -eq 1 || "${PRR_FANOUT_NATIVE:-}" == "true" ]] \
-  || { echo "prr-fanout-wezterm: PRR_FANOUT_NATIVE is not 'true'; not fanning out." >&2; exit 3; }
+# Run only as the wezterm backend. The router normalizes PRR_FANOUT and execs us
+# with PRR_FANOUT=wezterm; a direct caller must set it themselves.
+[[ "$TEST" -eq 1 || "${PRR_FANOUT:-}" == "wezterm" ]] \
+  || { echo "prr-fanout-wezterm: not selected (PRR_FANOUT != wezterm); refusing." >&2; exit 3; }
 [[ $# -ge 2 ]] \
   || { echo "prr-fanout-wezterm: need 2+ PRs to fan out (got $#)." >&2; exit 3; }
-# wezterm-native is Linux-only (it relies on the XDG runtime gui sockets); the
-# dispatch shim only routes here on Linux, but guard anyway.
+# Linux-only: this backend uses `setsid` (no macOS equivalent) and the XDG runtime
+# gui sockets. On macOS use the tmux backend, which drives wezterm fine.
 [[ "$(uname)" != "Darwin" ]] \
-  || { echo "prr-fanout-wezterm: native backend is Linux-only." >&2; exit 3; }
+  || { echo "prr-fanout-wezterm: native backend is Linux-only (use PRR_FANOUT=tmux on macOS)." >&2; exit 3; }
 [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]] \
   || { echo "prr-fanout-wezterm: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open panes." >&2; exit 3; }
 command -v wezterm >/dev/null 2>&1 || { echo "prr-fanout-wezterm: wezterm not on PATH." >&2; exit 3; }

@@ -151,7 +151,7 @@ Or, from inside the PR's own repository, just `/prr 583`.
 | 5. Approval gate | You see every comment verbatim and the verdict. Nothing is posted yet. |
 | 6. Post & clean up | On your approval, the review is submitted and the worktree removed. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
 
-## Parallel multi-PR review (`PRR_TMUX_FANOUT`)
+## Parallel multi-PR review (`PRR_FANOUT`)
 
 Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and
 `prr` can fan them out into a grid of interactive sessions:
@@ -160,24 +160,37 @@ Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and
 /prr 101 102 103 104
 ```
 
-When `PRR_TMUX_FANOUT=true`, a multi-PR run opens **one terminal** with a tiled
-**tmux** pane per PR, each pane running `/prr` on a single PR. You review and
-**approve each post in its own pane** — the approval gate is never bypassed.
-As each review finishes, its pane closes itself; when the last one closes, the
-terminal closes and you get a consolidated rollup back in the original session.
+When `PRR_FANOUT` selects a backend, a multi-PR run opens **one window** with one
+pane per PR, each pane running `/prr` on a single PR. You review and **approve
+each post in its own pane** — the approval gate is never bypassed. As each review
+finishes, its pane closes; when the last one closes you get a consolidated rollup
+back in the original session.
+
+`PRR_FANOUT` picks the backend:
+
+- **`PRR_FANOUT=tmux`** — one terminal running **tmux** with a tiled pane per PR.
+  Portable across terminals, free auto-tiling grid. The default (and what
+  `PRR_FANOUT=true` and the legacy `PRR_TMUX_FANOUT=true` normalize to).
+- **`PRR_FANOUT=wezterm`** — **wezterm-native** panes, no tmux (Linux only). See
+  [the wezterm-native backend](#wezterm-native-backend-prr_fanoutwezterm) below.
+
+The skill routes through `scripts/prr-fanout.sh`, which reads `PRR_FANOUT` and
+hands off to `scripts/prr-fanout-tmux.sh` or `scripts/prr-fanout-wezterm.sh`.
 
 The wait between approvals is a plain shell sleep loop, so an idle batch (you
 walked away) costs **no tokens** — only the active reviews do.
 
 **This assumes a graphical desktop session** (Linux X11/Xwayland or Wayland, or
 macOS), because the panes have to be visible for you to approve them. Over SSH
-or headless, or when `tmux` is not installed, the flag is ignored and the PRs
-are reviewed **one at a time** instead (the normal single-PR flow per PR). A
-single-PR run ignores the flag entirely.
+or headless, or when the selected backend's tools are missing, the fan-out
+refuses and the PRs are reviewed **one at a time** instead (the normal single-PR
+flow per PR). A single-PR run ignores `PRR_FANOUT` entirely.
 
 Opt in (and tune) via environment:
 
-- `PRR_TMUX_FANOUT` — set to `true` to enable the tmux fan-out for multi-PR runs.
+- `PRR_FANOUT` — set to `tmux` or `wezterm` to enable the fan-out for multi-PR
+  runs and choose the backend (unset = sequential review). `true` and the legacy
+  `PRR_TMUX_FANOUT=true` both mean `tmux`.
 - `PRR_FANOUT_TIMEOUT_MINS` — global wall-clock cap on the run; default `240`
   (4h). `0` disables the cap (safe, since waiting is token-free). On timeout the
   launcher stops, reports which PRs are still open, and **leaves your in-progress
@@ -217,10 +230,10 @@ Terminal → Settings → Profiles → Shell → "When the shell exits" → "Clo
 window". Bare PR numbers must be run from inside the PR's repo (as usual); full
 PR URLs work from anywhere.
 
-### wezterm-native backend (`PRR_FANOUT_NATIVE`, no tmux)
+### wezterm-native backend (`PRR_FANOUT=wezterm`)
 
 On a **wezterm** daily driver you can drop the tmux layer entirely. Set
-`PRR_FANOUT_NATIVE=true` and a multi-PR run hands off to `prr-fanout-wezterm.sh`,
+`PRR_FANOUT=wezterm` and a multi-PR run hands off to `prr-fanout-wezterm.sh`,
 which drives wezterm directly via `wezterm cli` instead of running tmux inside a
 window. Everything else is identical: one window, one pane per PR, the approval
 gate intact, panes closing as each review finishes, then the same rollup.
@@ -232,18 +245,21 @@ near-square grid (`cols = ceil(sqrt(N))`); a finished pane's space is absorbed b
 its sibling with **no rebalance-on-close** (these runs last minutes, so survivors
 just getting bigger is fine, and not re-tiling avoids yanking panes around mid-read).
 
-This is **Linux-only** and **opt-in**: with `PRR_FANOUT_NATIVE` unset — or on macOS,
-or when `wezterm` is not on `PATH` — nothing changes and the default tmux path
-(above) runs as before. `PRR_FANOUT_TIMEOUT_MINS` and `PRR_FANOUT_GEOMETRY` apply
-the same way; the geometry sizes the window via wezterm's `initial_cols`/`initial_rows`.
-Smoke-test it with `PRR_FANOUT_NATIVE=true /prr test-mode 1 2 3 4 5`.
+This backend is **Linux-only** — not because wezterm is (it runs fine on macOS),
+but because the backend's launch + isolation mechanics are: it detaches the gui
+with `setsid` (absent on macOS) and locates the new instance's socket under the
+XDG runtime dir. On macOS, use `PRR_FANOUT=tmux`, which drives wezterm just fine.
+`PRR_FANOUT_TIMEOUT_MINS` and `PRR_FANOUT_GEOMETRY` apply the same way; the
+geometry sizes the window via wezterm's `initial_cols`/`initial_rows`. Smoke-test
+it with `PRR_FANOUT=wezterm /prr test-mode 1 2 3 4 5`.
 
 **Smoke-testing the fan-out.** `/prr test-mode <N> <N> ...` (e.g. `/prr test-mode
 1 2 3 4 5 6`) runs the whole launcher **without invoking Claude**: it opens the
 tiled window and each pane mocks a review by writing its result file (staggered,
-so panes close one by one), letting you verify the terminal spawn, layout,
-sizing, pane-close, and rollup quickly. It needs tmux + a desktop session but
-ignores `PRR_TMUX_FANOUT` (it is an explicit test).
+so panes close one by one), letting you verify the spawn, layout, sizing,
+pane-close, and rollup quickly. It bypasses the enable gate (no `PRR_FANOUT`
+needed) and defaults to the `tmux` backend; prefix `PRR_FANOUT=wezterm` to
+smoke-test the wezterm-native backend instead.
 
 ## Re-review mode
 
@@ -340,9 +356,10 @@ That is it — the next `/prr` run signals progress on the matching PR post.
 - A full PR URL works from **any directory** — the skill fetches the PR from
   GitHub when you do not have the repo cloned. A bare PR number must be run
   from inside the PR's own git repository.
-- **tmux** and a **graphical desktop session** (Linux X11/Xwayland or Wayland,
-  or macOS) — optional, only for the parallel multi-PR fan-out
-  (`PRR_TMUX_FANOUT`). Without them, multi-PR runs review sequentially instead.
+- A **graphical desktop session** (Linux X11/Xwayland or Wayland, or macOS) plus
+  the selected backend's multiplexer — **tmux** for `PRR_FANOUT=tmux`, **wezterm**
+  for `PRR_FANOUT=wezterm` — optional, only for the parallel multi-PR fan-out.
+  Without them, multi-PR runs review sequentially instead.
 
 ## Bundle contents
 
@@ -354,8 +371,9 @@ prr/
 └── scripts/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
-    ├── prr-fanout.sh     # optional: parallel multi-PR review in tmux panes (PRR_TMUX_FANOUT)
-    ├── prr-fanout-wezterm.sh # optional: wezterm-native fan-out, no tmux (PRR_FANOUT_NATIVE)
+    ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
+    ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)
+    ├── prr-fanout-wezterm.sh # backend: wezterm-native panes, no tmux (Linux only)
     └── slack_react.py    # optional: react on the PR's chat post (opt-in via env)
 ```
 

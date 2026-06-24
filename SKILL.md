@@ -101,9 +101,10 @@ Throughout this workflow:
 **Test mode.** If the first argument is `test-mode` (e.g. `/prr test-mode 1 2 3
 4 5 6`), this is a no-Claude smoke test of the fan-out plumbing. Launch it **in
 the background** and relay the rollup; do not review anything yourself. It needs
-`tmux` + a graphical desktop but ignores `PRR_TMUX_FANOUT` (it is an explicit
-test). Each pane mocks a review by writing its own result file, so it exercises
-spawn → tile → detect → close → rollup without invoking Claude:
+a graphical desktop but bypasses the `PRR_FANOUT` gate (it is an explicit test)
+and defaults to the `tmux` backend. Each pane mocks a review by writing its own
+result file, so it exercises spawn → tile → detect → close → rollup without
+invoking Claude:
 
 ```
 ~/.claude/skills/prr/scripts/prr-fanout.sh test-mode <N> <N> [<N> ...]
@@ -112,10 +113,10 @@ spawn → tile → detect → close → rollup without invoking Claude:
 If the skill argument names **more than one PR** (space-separated URLs or
 numbers, e.g. `/prr 101 102 103`):
 
-- **If `PRR_TMUX_FANOUT=true` AND `tmux` is on PATH AND a graphical desktop is
+- **If `PRR_FANOUT` is set (`tmux` or `wezterm`) AND a graphical desktop is
   available** — on Linux that means `DISPLAY` or `WAYLAND_DISPLAY` is set; on
   macOS (`uname` = `Darwin`) it always is — hand the whole batch to the fan-out
-  launcher and do not review the PRs yourself. Run it **in the
+  router and do not review the PRs yourself. Run it **in the
   background** (`run_in_background: true`); it blocks until every review
   finishes, which is a long human-paced wait:
 
@@ -123,19 +124,21 @@ numbers, e.g. `/prr 101 102 103`):
   ~/.claude/skills/prr/scripts/prr-fanout.sh <PR> <PR> [<PR> ...]
   ```
 
-  Invoke it **bare** (no `PRR_TMUX_FANOUT=true` prefix, no pipe) — the flag is
-  already `true` in the environment when this gate fires, and a leading env
+  Invoke it **bare** (no `PRR_FANOUT=...` prefix, no pipe) — the variable is
+  already set in the environment when this gate fires, and a leading env
   assignment or pipe would stop the permission allow-list from matching.
 
-  It opens one terminal with a tiled tmux pane per PR, each pane running `/prr`
-  on a single PR with the approval gate fully intact. It closes each pane as
-  that PR's review finishes (it watches the result file `post-review.sh` writes),
-  then prints a consolidated rollup. Do **not** run steps 1-6 for the batch
-  yourself. When the background launcher exits, relay its rollup to the user.
+  The router reads `PRR_FANOUT` and opens one window with a pane per PR (tiled
+  tmux panes, or wezterm-native panes), each running `/prr` on a single PR with
+  the approval gate fully intact. It closes each pane as that PR's review finishes
+  (it watches the result file `post-review.sh` writes), then prints a consolidated
+  rollup. Do **not** run steps 1-6 for the batch yourself. When the background
+  launcher exits, relay its rollup to the user.
 
-- **Otherwise** (flag unset, no GUI, or no tmux) — fall back to reviewing the
-  PRs **one at a time**: run the normal single-PR flow (steps 1-6) for the first
-  PR, then the next, and so on. Never block on a missing GUI/tmux.
+- **Otherwise** (`PRR_FANOUT` unset, no GUI, or the selected backend's tools are
+  missing) — fall back to reviewing the PRs **one at a time**: run the normal
+  single-PR flow (steps 1-6) for the first PR, then the next, and so on. Never
+  block on a missing GUI/backend.
 
 If the argument names a single PR, ignore this section and start at step 1.
 
