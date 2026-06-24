@@ -75,18 +75,18 @@ for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
 
 # --- pick a terminal ---------------------------------------------------------
 # macOS: built-in Terminal.app by default; PRR_FANOUT_TERMINAL overrides it
-# (best-effort, see the spawn below). Linux: tilix, gnome-terminal,
+# (best-effort, see the spawn below). Linux: wezterm, tilix, gnome-terminal,
 # x-terminal-emulator (the desktop default via update-alternatives), xterm;
 # PRR_FANOUT_TERMINAL forces a binary.
 if [[ "$os" == "Darwin" ]]; then
   term="${PRR_FANOUT_TERMINAL:-Terminal}"
 else
   term=""
-  for t in "${PRR_FANOUT_TERMINAL:-}" tilix gnome-terminal x-terminal-emulator xterm; do
+  for t in "${PRR_FANOUT_TERMINAL:-}" wezterm tilix gnome-terminal x-terminal-emulator xterm; do
     [[ -n "$t" ]] && command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
   done
   [[ -n "$term" ]] \
-    || { echo "prr-fanout: no supported terminal (tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
+    || { echo "prr-fanout: no supported terminal (wezterm/tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
 fi
 
 session="prr-fanout-$$"
@@ -126,10 +126,14 @@ tmux set-hook -t "$session" client-attached 'select-layout tiled' >/dev/null 2>&
 # Open ONE visible terminal attached to the session, sized to PRR_FANOUT_GEOMETRY
 # (COLSxROWS); tmux resizes the panes to fit on attach. macOS drives Terminal.app
 # via AppleScript (no -e/--geometry there); Linux uses per-terminal flags
-# (tilix/gnome-terminal --geometry=, xterm -geometry; others open default-sized).
+# (tilix/gnome-terminal --geometry=, xterm -geometry, wezterm --config
+# initial_cols/initial_rows; others open default-sized).
 geo="${PRR_FANOUT_GEOMETRY:-160x50}"
 cols="${geo%%x*}"; rows="${geo##*x}"
 attach="tmux attach -t $session"
+# Capture the terminal spawn's stderr so a failed launch (e.g. a bad flag) is not
+# swallowed. Single file, overwritten (truncated) on each invocation.
+spawnlog="/tmp/prr-fanout-spawn.log"
 if [[ "$os" == "Darwin" ]]; then
   # Open the terminal on a throwaway .command that first resizes itself via the
   # xterm "CSI 8 ; rows ; cols t" escape (honored by Terminal.app and most
@@ -139,15 +143,16 @@ if [[ "$os" == "Darwin" ]]; then
   cmdfile="${TMPDIR:-/tmp}/prr-fanout-$$.command"
   printf '#!/bin/sh\nprintf "\\033[8;%s;%st"\nexec %s\n' "$rows" "$cols" "$attach" > "$cmdfile"
   chmod +x "$cmdfile"
-  open -a "$term" "$cmdfile" \
+  open -a "$term" "$cmdfile" 2>"$spawnlog" \
     || echo "prr-fanout: could not open terminal '$term' (is it installed?)." >&2
 else
   if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
   case "$term" in
-    tilix)          "${SP[@]}" "$term" --geometry="$geo" -e "$attach"                >/dev/null 2>&1 & ;;
-    gnome-terminal) "${SP[@]}" "$term" --geometry="$geo" -- tmux attach -t "$session" >/dev/null 2>&1 & ;;
-    xterm)          "${SP[@]}" "$term" -geometry "$geo"  -e "$attach"                >/dev/null 2>&1 & ;;
-    *)              "${SP[@]}" "$term" -e "$attach"                                   >/dev/null 2>&1 & ;;
+    wezterm)        "${SP[@]}" "$term" --config "initial_cols=$cols" --config "initial_rows=$rows" start --always-new-process -- tmux attach -t "$session" >"$spawnlog" 2>&1 & ;;
+    tilix)          "${SP[@]}" "$term" --geometry="$geo" -e "$attach"                >"$spawnlog" 2>&1 & ;;
+    gnome-terminal) "${SP[@]}" "$term" --geometry="$geo" -- tmux attach -t "$session" >"$spawnlog" 2>&1 & ;;
+    xterm)          "${SP[@]}" "$term" -geometry "$geo"  -e "$attach"                >"$spawnlog" 2>&1 & ;;
+    *)              "${SP[@]}" "$term" -e "$attach"                                   >"$spawnlog" 2>&1 & ;;
   esac
 fi
 
@@ -155,6 +160,7 @@ fi
 echo "prr-fanout: launched ${#refs[@]} reviews in tmux session '$session' via $term"
 echo "prr-fanout: PRs: ${numbers[*]}"
 echo "prr-fanout: attach manually any time with: tmux attach -t $session"
+echo "prr-fanout: terminal spawn log: $spawnlog (check it if no window appears)"
 echo "prr-fanout: timeout=${timeout_mins}m (0=none); waiting for reviews to finish..."
 
 # --- poll loop (pure shell sleep; no tokens) ---------------------------------

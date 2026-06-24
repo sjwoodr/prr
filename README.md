@@ -183,8 +183,9 @@ Opt in (and tune) via environment:
   launcher stops, reports which PRs are still open, and **leaves your in-progress
   panes alone** (it prints the `tmux attach` command to finish them by hand).
 - `PRR_FANOUT_TERMINAL` — force the terminal, skipping detection. On **Linux**
-  the auto-detection order is `tilix`, `gnome-terminal`, `x-terminal-emulator`
-  (the desktop default via `update-alternatives`), then `xterm`. On **macOS** the
+  the auto-detection order is `wezterm`, `tilix`, `gnome-terminal`,
+  `x-terminal-emulator` (the desktop default via `update-alternatives`), then
+  `xterm`. On **macOS** the
   default is the built-in **Terminal.app**; set this to another terminal app name
   (e.g. `iTerm`, `Alacritty`) to override. The macOS override is best-effort: the
   app is opened on the attach command and a Terminal-style resize is attempted,
@@ -195,12 +196,14 @@ Opt in (and tune) via environment:
   spawned window self-resizes with a terminal escape that Terminal.app honors.
   Terminals that ignore the escape (or other Linux terminals) open at their
   default size — the panes still tile evenly and re-tile if you resize the
-  window. Bump it for big batches so the tiled panes stay readable (e.g.
-  `220x60` for a 3x3 grid of eight).
+  window. `wezterm` has no geometry flag, so the size is applied through its
+  `--config initial_cols`/`initial_rows` overrides instead. Bump it for big
+  batches so the tiled panes stay readable (e.g. `220x60` for a 3x3 grid of
+  eight).
 
 Notes: `gnome-terminal` runs its command in a background server, so depending on
 your profile's "When command exits" setting the window may linger after the
-panes close; `tilix` and `xterm` close cleanly. On **macOS** Terminal.app leaves
+panes close; `wezterm`, `tilix`, and `xterm` close cleanly. On **macOS** Terminal.app leaves
 the spawned window on "[Process completed]" when the panes finish (the panes
 always close inside tmux regardless). To have it close automatically, set
 Terminal's shell-exit action once, then relaunch Terminal:
