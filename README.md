@@ -151,7 +151,7 @@ Or, from inside the PR's own repository, just `/prr 583`.
 | 5. Approval gate | You see every comment verbatim and the verdict. Nothing is posted yet. |
 | 6. Post & clean up | On your approval, the review is submitted and the worktree removed. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
 
-## Parallel multi-PR review (`PRR_TMUX_FANOUT`)
+## Parallel multi-PR review (`PRR_FANOUT`)
 
 Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and
 `prr` can fan them out into a grid of interactive sessions:
@@ -160,45 +160,63 @@ Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and
 /prr 101 102 103 104
 ```
 
-When `PRR_TMUX_FANOUT=true`, a multi-PR run opens **one terminal** with a tiled
-**tmux** pane per PR, each pane running `/prr` on a single PR. You review and
-**approve each post in its own pane** — the approval gate is never bypassed.
-As each review finishes, its pane closes itself; when the last one closes, the
-terminal closes and you get a consolidated rollup back in the original session.
+When `PRR_FANOUT=true`, a multi-PR run opens **one window** with one pane per
+PR, each pane running `/prr` on a single PR. You review and **approve each post
+in its own pane** — the approval gate is never bypassed. As each review finishes
+its pane closes itself; when the last one closes, the window closes and you get a
+consolidated rollup back in the original session.
+
+The pane host is chosen automatically:
+
+- **kitty** (preferred, any OS) — if `kitty` is on your `PATH`, the fan-out uses
+  kitty's native **grid** layout: a true auto-grid that stays evenly tiled and
+  **rebalances as panes close**, with **focus-follows-mouse** so you just hover
+  to type in a pane. No tmux involved.
+- **tmux** (fallback) — without kitty, the fan-out opens a terminal
+  (tilix/gnome-terminal/x-terminal-emulator/xterm, or Terminal.app on macOS)
+  hosting a tiled **tmux** session, one pane per PR.
+
+(The former `PRR_TMUX_FANOUT=true` is still honored as an alias, so existing
+setups keep working.)
 
 The wait between approvals is a plain shell sleep loop, so an idle batch (you
 walked away) costs **no tokens** — only the active reviews do.
 
 **This assumes a graphical desktop session** (Linux X11/Xwayland or Wayland, or
 macOS), because the panes have to be visible for you to approve them. Over SSH
-or headless, or when `tmux` is not installed, the flag is ignored and the PRs
-are reviewed **one at a time** instead (the normal single-PR flow per PR). A
-single-PR run ignores the flag entirely.
+or headless, or when neither kitty nor tmux is installed, the flag is ignored
+and the PRs are reviewed **one at a time** instead (the normal single-PR flow
+per PR). A single-PR run ignores the flag entirely.
 
 Opt in (and tune) via environment:
 
-- `PRR_TMUX_FANOUT` — set to `true` to enable the tmux fan-out for multi-PR runs.
+- `PRR_FANOUT` — set to `true` to enable the fan-out for multi-PR runs (uses
+  kitty if installed, otherwise tmux).
 - `PRR_FANOUT_TIMEOUT_MINS` — global wall-clock cap on the run; default `240`
   (4h). `0` disables the cap (safe, since waiting is token-free). On timeout the
   launcher stops, reports which PRs are still open, and **leaves your in-progress
-  panes alone** (it prints the `tmux attach` command to finish them by hand).
-- `PRR_FANOUT_TERMINAL` — force the terminal, skipping detection. On **Linux**
+  panes alone** (under tmux it prints the `tmux attach` command to finish them by
+  hand; under kitty the window stays open).
+- `PRR_FANOUT_TERMINAL` — (tmux fallback only) force the terminal, skipping detection. On **Linux**
   the auto-detection order is `tilix`, `gnome-terminal`, `x-terminal-emulator`
   (the desktop default via `update-alternatives`), then `xterm`. On **macOS** the
   default is the built-in **Terminal.app**; set this to another terminal app name
   (e.g. `iTerm`, `Alacritty`) to override. The macOS override is best-effort: the
   app is opened on the attach command and a Terminal-style resize is attempted,
   but if the app ignores it the window just opens at its default size.
-- `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`; default
-  `160x50`. On Linux it is applied via the terminal's geometry flag
-  (`tilix`/`gnome-terminal` `--geometry=`, `xterm` `-geometry`); on macOS the
+- `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`. Honored by
+  both backends, with a different default each: **kitty** `200x60`, **tmux**
+  `160x50`. Under kitty it sets the window's initial size in cells
+  (`initial_window_width`/`initial_window_height`), opening at a fixed size
+  rather than maximized. Under tmux it is applied via the terminal's geometry
+  flag (`tilix`/`gnome-terminal` `--geometry=`, `xterm` `-geometry`); on macOS the
   spawned window self-resizes with a terminal escape that Terminal.app honors.
   Terminals that ignore the escape (or other Linux terminals) open at their
   default size — the panes still tile evenly and re-tile if you resize the
   window. Bump it for big batches so the tiled panes stay readable (e.g.
-  `220x60` for a 3x3 grid of eight).
+  `220x70` for a 3x3 grid of eight).
 
-Notes: `gnome-terminal` runs its command in a background server, so depending on
+Notes (tmux fallback): `gnome-terminal` runs its command in a background server, so depending on
 your profile's "When command exits" setting the window may linger after the
 panes close; `tilix` and `xterm` close cleanly. On **macOS** Terminal.app leaves
 the spawned window on "[Process completed]" when the panes finish (the panes
@@ -218,8 +236,8 @@ PR URLs work from anywhere.
 1 2 3 4 5 6`) runs the whole launcher **without invoking Claude**: it opens the
 tiled window and each pane mocks a review by writing its result file (staggered,
 so panes close one by one), letting you verify the terminal spawn, layout,
-sizing, pane-close, and rollup quickly. It needs tmux + a desktop session but
-ignores `PRR_TMUX_FANOUT` (it is an explicit test).
+sizing, pane-close, and rollup quickly. It needs kitty or tmux + a desktop
+session but ignores the opt-in flag (it is an explicit test).
 
 ## Re-review mode
 
@@ -316,9 +334,11 @@ That is it — the next `/prr` run signals progress on the matching PR post.
 - A full PR URL works from **any directory** — the skill fetches the PR from
   GitHub when you do not have the repo cloned. A bare PR number must be run
   from inside the PR's own git repository.
-- **tmux** and a **graphical desktop session** (Linux X11/Xwayland or Wayland,
-  or macOS) — optional, only for the parallel multi-PR fan-out
-  (`PRR_TMUX_FANOUT`). Without them, multi-PR runs review sequentially instead.
+- **kitty** (preferred) or **tmux**, plus a **graphical desktop session** (Linux
+  X11/Xwayland or Wayland, or macOS) — optional, only for the parallel multi-PR
+  fan-out (`PRR_FANOUT`). With kitty it uses kitty's native grid; without kitty
+  it falls back to tmux in a terminal. Without any of these, multi-PR runs review
+  sequentially instead.
 
 ## Bundle contents
 
@@ -330,7 +350,7 @@ prr/
 └── scripts/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
-    ├── prr-fanout.sh     # optional: parallel multi-PR review in tmux panes (PRR_TMUX_FANOUT)
+    ├── prr-fanout.sh     # optional: parallel multi-PR review, kitty grid or tmux panes (PRR_FANOUT)
     └── slack_react.py    # optional: react on the PR's chat post (opt-in via env)
 ```
 
