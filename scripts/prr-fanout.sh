@@ -42,6 +42,22 @@ if [[ "${1:-}" == "test-mode" ]]; then TEST=1; shift; fi
   || { echo "prr-fanout: PRR_TMUX_FANOUT is not 'true'; not fanning out." >&2; exit 3; }
 [[ $# -ge 2 ]] \
   || { echo "prr-fanout: need 2+ PRs to fan out (got $#)." >&2; exit 3; }
+
+# --- wezterm-native dispatch (opt-in; no tmux) -------------------------------
+# When PRR_FANOUT_NATIVE=true and wezterm is available on Linux, hand the whole
+# batch to the wezterm-native backend, which drives wezterm directly instead of
+# layering tmux on top. tmux stays the default for every other case (flag unset,
+# macOS, or no wezterm), so nothing regresses.
+if [[ "${PRR_FANOUT_NATIVE:-}" == "true" && "$(uname)" != "Darwin" ]] \
+   && command -v wezterm >/dev/null 2>&1; then
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ "$TEST" -eq 1 ]]; then
+    exec "$here/prr-fanout-wezterm.sh" test-mode "$@"
+  else
+    exec "$here/prr-fanout-wezterm.sh" "$@"
+  fi
+fi
+
 os="$(uname)"
 # macOS (Aqua) has no DISPLAY; a desktop GUI is assumed present. On Linux require
 # an X11/Wayland session, since the panes must be visible to approve them.

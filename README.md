@@ -217,6 +217,27 @@ Terminal → Settings → Profiles → Shell → "When the shell exits" → "Clo
 window". Bare PR numbers must be run from inside the PR's repo (as usual); full
 PR URLs work from anywhere.
 
+### wezterm-native backend (`PRR_FANOUT_NATIVE`, no tmux)
+
+On a **wezterm** daily driver you can drop the tmux layer entirely. Set
+`PRR_FANOUT_NATIVE=true` and a multi-PR run hands off to `prr-fanout-wezterm.sh`,
+which drives wezterm directly via `wezterm cli` instead of running tmux inside a
+window. Everything else is identical: one window, one pane per PR, the approval
+gate intact, panes closing as each review finishes, then the same rollup.
+
+It opens its **own** isolated gui instance (`wezterm start --class prr-fanout-<pid>
+--always-new-process`) and addresses it only through that instance's private gui
+socket, so your existing wezterm windows are never touched. Panes are tiled into a
+near-square grid (`cols = ceil(sqrt(N))`); a finished pane's space is absorbed by
+its sibling with **no rebalance-on-close** (these runs last minutes, so survivors
+just getting bigger is fine, and not re-tiling avoids yanking panes around mid-read).
+
+This is **Linux-only** and **opt-in**: with `PRR_FANOUT_NATIVE` unset — or on macOS,
+or when `wezterm` is not on `PATH` — nothing changes and the default tmux path
+(above) runs as before. `PRR_FANOUT_TIMEOUT_MINS` and `PRR_FANOUT_GEOMETRY` apply
+the same way; the geometry sizes the window via wezterm's `initial_cols`/`initial_rows`.
+Smoke-test it with `PRR_FANOUT_NATIVE=true /prr test-mode 1 2 3 4 5`.
+
 **Smoke-testing the fan-out.** `/prr test-mode <N> <N> ...` (e.g. `/prr test-mode
 1 2 3 4 5 6`) runs the whole launcher **without invoking Claude**: it opens the
 tiled window and each pane mocks a review by writing its result file (staggered,
@@ -334,6 +355,7 @@ prr/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
     ├── prr-fanout.sh     # optional: parallel multi-PR review in tmux panes (PRR_TMUX_FANOUT)
+    ├── prr-fanout-wezterm.sh # optional: wezterm-native fan-out, no tmux (PRR_FANOUT_NATIVE)
     └── slack_react.py    # optional: react on the PR's chat post (opt-in via env)
 ```
 
