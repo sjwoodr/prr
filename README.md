@@ -374,6 +374,7 @@ prr/
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
     ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)
     ├── prr-fanout-wezterm.sh # backend: wezterm-native panes, no tmux (Linux only)
+    ├── prr-fanout-common.sh  # shared helpers sourced by both fan-out backends
     └── slack_react.py    # optional: react on the PR's chat post (opt-in via env)
 ```
 

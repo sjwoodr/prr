@@ -23,6 +23,9 @@
 #   3. When all PRs are accounted for (result file, or pane/session gone), print
 #      a consolidated rollup and exit. The terminal closes itself when tmux ends.
 #
+# Shared helpers (prnum, init_refs, pane_cmd, remaining, print_rollup) live in
+# prr-fanout-common.sh, sourced below.
+#
 # Config (env):
 #   PRR_FANOUT               must be "tmux" (the router sets this); test-mode bypasses it
 #   PRR_FANOUT_TIMEOUT_MINS  global wall-clock cap; default 240 (4h); 0 = no cap
@@ -32,6 +35,9 @@
 # Author: Steve Woodruff (@sjwoodr)
 # SPDX-License-Identifier: MIT
 set -euo pipefail
+TAG="prr-fanout-tmux"
+# shellcheck source-path=SCRIPTDIR source=prr-fanout-common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/prr-fanout-common.sh"
 
 # --- test mode + guard -------------------------------------------------------
 # `test-mode` as the first arg runs a no-Claude smoke test of the plumbing: each
@@ -45,39 +51,28 @@ if [[ "${1:-}" == "test-mode" ]]; then TEST=1; shift; fi
 # back-compat aliases) and execs us with PRR_FANOUT=tmux; a direct caller must set
 # it themselves.
 [[ "$TEST" -eq 1 || "${PRR_FANOUT:-}" == "tmux" ]] \
-  || { echo "prr-fanout-tmux: not selected (PRR_FANOUT != tmux); refusing." >&2; exit 3; }
+  || { echo "$TAG: not selected (PRR_FANOUT != tmux); refusing." >&2; exit 3; }
 [[ $# -ge 2 ]] \
-  || { echo "prr-fanout: need 2+ PRs to fan out (got $#)." >&2; exit 3; }
+  || { echo "$TAG: need 2+ PRs to fan out (got $#)." >&2; exit 3; }
 
 os="$(uname)"
 # macOS (Aqua) has no DISPLAY; a desktop GUI is assumed present. On Linux require
 # an X11/Wayland session, since the panes must be visible to approve them.
 if [[ "$os" != "Darwin" ]]; then
   [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]] \
-    || { echo "prr-fanout: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open panes." >&2; exit 3; }
+    || { echo "$TAG: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open panes." >&2; exit 3; }
 fi
-command -v tmux >/dev/null 2>&1 || { echo "prr-fanout: tmux not on PATH." >&2; exit 3; }
+command -v tmux >/dev/null 2>&1 || { echo "$TAG: tmux not on PATH." >&2; exit 3; }
 [[ "$TEST" -eq 1 ]] || command -v claude >/dev/null 2>&1 \
-  || { echo "prr-fanout: claude not on PATH." >&2; exit 3; }
+  || { echo "$TAG: claude not on PATH." >&2; exit 3; }
 
 timeout_mins="${PRR_FANOUT_TIMEOUT_MINS:-240}"
 
-# --- parse each ref to a PR number (same rule as setup/post-review.sh) --------
-prnum() {
-  if [[ "$1" =~ ^https://github\.com/[^/]+/[^/]+/pull/([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
-  elif [[ "$1" =~ ^[0-9]+$ ]]; then
-    echo "$1"
-  else
-    echo "prr-fanout: '$1' is neither a PR URL nor a number." >&2; return 2
-  fi
-}
-
+# Parse refs -> numbers (shared prnum), then clear stale result files from a
+# previous run so we do not read them as done.
 refs=("$@")
 numbers=()
 for r in "${refs[@]}"; do numbers+=("$(prnum "$r")"); done
-
-# Clear any stale result files from a previous run so we do not read them as done.
 for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
 
 # --- pick a terminal ---------------------------------------------------------
@@ -93,23 +88,10 @@ else
     [[ -n "$t" ]] && command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
   done
   [[ -n "$term" ]] \
-    || { echo "prr-fanout: no supported terminal (wezterm/tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
+    || { echo "$TAG: no supported terminal (wezterm/tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
 fi
 
 session="prr-fanout-$$"
-
-pane_cmd() {  # $1 = PR ref, $2 = index -> the command string a pane runs
-  local ref="$1" idx="$2"
-  if [[ "$TEST" -eq 1 ]]; then
-    # Mock a review: banner, a staggered wait (so panes close one by one), then
-    # write the result file the launcher polls, then idle until it kills the pane.
-    local n="${numbers[$idx]}" delay=$(( 3 + idx * 2 ))
-    printf 'echo "[TEST MODE] mock review of PR %s; finishing in %ss"; sleep %s; echo "pr=%s status=test comments=%s" > /tmp/prr-fanout-%s.result; echo "[TEST MODE] PR %s result written; waiting for launcher to close this pane"; sleep 600' \
-      "$n" "$delay" "$delay" "$n" "$idx" "$n" "$n"
-  else
-    printf 'PRR_FANOUT_PANE=1 claude "/prr %s"' "$ref"
-  fi
-}
 
 # Build the session detached with a large virtual size so tiling many panes does
 # not hit "no space for new pane"; it resizes to the real terminal on attach.
@@ -151,7 +133,7 @@ if [[ "$os" == "Darwin" ]]; then
   printf '#!/bin/sh\nprintf "\\033[8;%s;%st"\nexec %s\n' "$rows" "$cols" "$attach" > "$cmdfile"
   chmod +x "$cmdfile"
   open -a "$term" "$cmdfile" 2>"$spawnlog" \
-    || echo "prr-fanout: could not open terminal '$term' (is it installed?)." >&2
+    || echo "$TAG: could not open terminal '$term' (is it installed?)." >&2
 else
   if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
   case "$term" in
@@ -163,30 +145,24 @@ else
   esac
 fi
 
-[[ "$TEST" -eq 1 ]] && echo "prr-fanout: *** TEST MODE *** mocking reviews, no Claude invoked"
-echo "prr-fanout: launched ${#refs[@]} reviews in tmux session '$session' via $term"
-echo "prr-fanout: PRs: ${numbers[*]}"
-echo "prr-fanout: attach manually any time with: tmux attach -t $session"
-echo "prr-fanout: terminal spawn log: $spawnlog (check it if no window appears)"
-echo "prr-fanout: timeout=${timeout_mins}m (0=none); waiting for reviews to finish..."
+[[ "$TEST" -eq 1 ]] && echo "$TAG: *** TEST MODE *** mocking reviews, no Claude invoked"
+echo "$TAG: launched ${#refs[@]} reviews in tmux session '$session' via $term"
+echo "$TAG: PRs: ${numbers[*]}"
+echo "$TAG: attach manually any time with: tmux attach -t $session"
+echo "$TAG: terminal spawn log: $spawnlog (check it if no window appears)"
+echo "$TAG: timeout=${timeout_mins}m (0=none); waiting for reviews to finish..."
 
 # --- poll loop (pure shell sleep; no tokens) ---------------------------------
 declare -A done_map=()
 deadline=$(( $(date +%s) + timeout_mins * 60 ))
 
-remaining() {
-  local out=()
-  for n in "${numbers[@]}"; do [[ -n "${done_map[$n]:-}" ]] || out+=("$n"); done
-  echo "${out[*]}"
-}
-
 while :; do
   if [[ "$timeout_mins" -ne 0 && "$(date +%s)" -ge "$deadline" ]]; then
-    echo "prr-fanout: TIMEOUT after ${timeout_mins}m; still open: $(remaining)" >&2
+    echo "$TAG: TIMEOUT after ${timeout_mins}m; still open: $(remaining)" >&2
     break
   fi
   tmux has-session -t "$session" 2>/dev/null \
-    || { echo "prr-fanout: tmux session ended (panes all closed)."; break; }
+    || { echo "$TAG: tmux session ended (panes all closed)."; break; }
 
   for n in "${numbers[@]}"; do
     [[ -n "${done_map[$n]:-}" ]] && continue
@@ -194,29 +170,21 @@ while :; do
     if [[ -f "$rf" ]]; then
       done_map[$n]="$(cat "$rf")"
       rm -f "$rf"
-      [[ -n "${pane_of[$n]:-}" ]] && tmux kill-pane -t "${pane_of[$n]}" 2>/dev/null || true
+      if [[ -n "${pane_of[$n]:-}" ]]; then tmux kill-pane -t "${pane_of[$n]}" 2>/dev/null || true; fi
       tmux select-layout -t "$session":reviews tiled >/dev/null 2>&1 || true
-      echo "prr-fanout: done #$n -> ${done_map[$n]}"
+      echo "$TAG: done #$n -> ${done_map[$n]}"
     fi
   done
 
-  [[ -z "$(remaining)" ]] && { echo "prr-fanout: all reviews complete."; break; }
+  [[ -z "$(remaining)" ]] && { echo "$TAG: all reviews complete."; break; }
   sleep 5
 done
 
 # --- rollup ------------------------------------------------------------------
-echo
-echo "===== prr-fanout rollup ====="
-for n in "${numbers[@]}"; do
-  if [[ -n "${done_map[$n]:-}" ]]; then
-    echo "  #$n  ${done_map[$n]}"
-  else
-    echo "  #$n  (no result — still open or aborted)"
-  fi
-done
+print_rollup
 
 if [[ -z "$(remaining)" ]]; then
   tmux kill-session -t "$session" 2>/dev/null || true
 else
-  echo "prr-fanout: left open panes in place; reattach to finish: tmux attach -t $session"
+  echo "$TAG: left open panes in place; reattach to finish: tmux attach -t $session"
 fi
