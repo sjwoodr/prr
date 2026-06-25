@@ -361,6 +361,39 @@ That is it — the next `/prr` run signals progress on the matching PR post.
   for `PRR_FANOUT=wezterm` — optional, only for the parallel multi-PR fan-out.
   Without them, multi-PR runs review sequentially instead.
 
+### Installing a fan-out backend
+
+Only needed if you want the parallel fan-out (`PRR_FANOUT`); single-PR review
+needs neither.
+
+**tmux** (default backend) is in the standard repos:
+
+```bash
+brew install tmux                  # macOS
+sudo apt install tmux              # Ubuntu/Debian
+```
+
+**wezterm** is *not* in Ubuntu's default repos — on macOS it is a Homebrew cask,
+on Ubuntu/Debian you add WezTerm's apt repository first:
+
+```bash
+# macOS
+brew install --cask wezterm
+
+# Ubuntu/Debian (official apt repo)
+curl -fsSL https://apt.fury.io/wez/gpg.key | sudo gpg --yes --dearmor -o /usr/share/keyrings/wezterm-fury.gpg
+echo 'deb [signed-by=/usr/share/keyrings/wezterm-fury.gpg] https://apt.fury.io/wez/ * *' | sudo tee /etc/apt/sources.list.d/wezterm.list
+sudo chmod 644 /usr/share/keyrings/wezterm-fury.gpg
+sudo apt update
+sudo apt install wezterm
+```
+
+If you would rather not add the repo, WezTerm also ships as a Flatpak
+(`flatpak install flathub org.wezfurlong.wezterm`) or an AppImage / `.deb` from
+its [GitHub releases](https://github.com/wezterm/wezterm/releases). (The
+wezterm backend is Linux-only; on macOS use `PRR_FANOUT=tmux`, which drives
+wezterm too.)
+
 ## Bundle contents
 
 ```
