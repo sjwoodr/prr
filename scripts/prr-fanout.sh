@@ -15,9 +15,11 @@
 # gate lives in the per-PR `/prr` review, untouched by either backend.
 #
 # Config (env):
-#   PRR_FANOUT   "tmux", "wezterm", or "terminator". Unset => refuse with exit 3 (the skill then
-#                reviews sequentially). Back-compat: PRR_FANOUT=true and the legacy
-#                PRR_TMUX_FANOUT=true both normalize to "tmux".
+#   PRR_FANOUT   "tmux", "wezterm", or "terminator" forces that backend. UNSET is
+#                default-on: auto-pick "tmux" when tmux is on PATH, else exit 3 so
+#                the skill reviews sequentially. "off" (also none/false/0) forces
+#                sequential (exit 3) even with tmux installed. Back-compat:
+#                PRR_FANOUT=true and the legacy PRR_TMUX_FANOUT=true both mean tmux.
 #   (PRR_FANOUT_TIMEOUT_MINS / PRR_FANOUT_GEOMETRY / PRR_FANOUT_TERMINAL are read
 #    by the backends; see their headers.)
 #
@@ -34,20 +36,31 @@ set -euo pipefail
 TEST=0
 if [[ "${1:-}" == "test-mode" ]]; then TEST=1; shift; fi
 
-# Resolve the backend. Back-compat: PRR_FANOUT=true and legacy PRR_TMUX_FANOUT=true
-# both mean "tmux".
+# Resolve the backend. Aliases: PRR_FANOUT=true and legacy PRR_TMUX_FANOUT=true
+# both mean "tmux"; off/none/false/0 are an explicit opt-out.
 backend="${PRR_FANOUT:-}"
-[[ "$backend" == "true" ]] && backend="tmux"
+case "$backend" in
+  true)              backend="tmux" ;;
+  off|none|false|0)  backend="__off__" ;;
+esac
 [[ -z "$backend" && "${PRR_TMUX_FANOUT:-}" == "true" ]] && backend="tmux"
+
 if [[ "$TEST" -eq 1 ]]; then
-  [[ -n "$backend" ]] || backend="tmux"
-else
-  [[ -n "$backend" ]] \
-    || { echo "prr-fanout: PRR_FANOUT is not set; not fanning out." >&2; exit 3; }
+  # test-mode is an explicit smoke test: ignore the opt-out and default to tmux.
+  [[ -n "$backend" && "$backend" != "__off__" ]] || backend="tmux"
+elif [[ "$backend" == "__off__" ]]; then
+  echo "prr-fanout: PRR_FANOUT=off; fan-out disabled, reviewing sequentially." >&2; exit 3
+elif [[ -z "$backend" ]]; then
+  # Default-on: nothing set -> use tmux when available, else fall back to sequential.
+  if command -v tmux >/dev/null 2>&1; then
+    backend="tmux"
+  else
+    echo "prr-fanout: PRR_FANOUT unset and tmux not on PATH; reviewing sequentially." >&2; exit 3
+  fi
 fi
 case "$backend" in
   tmux|wezterm|terminator) ;;
-  *) echo "prr-fanout: PRR_FANOUT must be 'tmux', 'wezterm', or 'terminator' (got '$backend')." >&2; exit 3 ;;
+  *) echo "prr-fanout: PRR_FANOUT must be 'tmux', 'wezterm', 'terminator', or 'off' (got '$backend')." >&2; exit 3 ;;
 esac
 
 # Hand off to the selected backend. Export the normalized value so the backend's

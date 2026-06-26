@@ -77,18 +77,18 @@ for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
 
 # --- pick a terminal ---------------------------------------------------------
 # macOS: built-in Terminal.app by default; PRR_FANOUT_TERMINAL overrides it
-# (best-effort, see the spawn below). Linux: wezterm, tilix, gnome-terminal,
-# x-terminal-emulator (the desktop default via update-alternatives), xterm;
-# PRR_FANOUT_TERMINAL forces a binary.
+# (best-effort, see the spawn below). Linux: tilix, terminator, wezterm,
+# gnome-terminal, x-terminal-emulator (the desktop default via
+# update-alternatives), xterm; PRR_FANOUT_TERMINAL forces a binary.
 if [[ "$os" == "Darwin" ]]; then
   term="${PRR_FANOUT_TERMINAL:-Terminal}"
 else
   term=""
-  for t in "${PRR_FANOUT_TERMINAL:-}" wezterm tilix gnome-terminal x-terminal-emulator xterm; do
+  for t in "${PRR_FANOUT_TERMINAL:-}" tilix terminator wezterm gnome-terminal x-terminal-emulator xterm; do
     [[ -n "$t" ]] && command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
   done
   [[ -n "$term" ]] \
-    || { echo "$TAG: no supported terminal (wezterm/tilix/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
+    || { echo "$TAG: no supported terminal (tilix/terminator/wezterm/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
 fi
 
 session="prr-fanout-$$"
@@ -115,7 +115,7 @@ tmux set-hook -t "$session" client-attached 'select-layout tiled' >/dev/null 2>&
 # Open ONE visible terminal attached to the session, sized to PRR_FANOUT_GEOMETRY
 # (COLSxROWS); tmux resizes the panes to fit on attach. macOS drives Terminal.app
 # via AppleScript (no -e/--geometry there); Linux uses per-terminal flags
-# (tilix/gnome-terminal --geometry=, xterm -geometry, wezterm --config
+# (tilix/terminator/gnome-terminal --geometry=, xterm -geometry, wezterm --config
 # initial_cols/initial_rows; others open default-sized).
 geo="${PRR_FANOUT_GEOMETRY:-160x50}"
 cols="${geo%%x*}"; rows="${geo##*x}"
@@ -139,6 +139,7 @@ else
   case "$term" in
     wezterm)        "${SP[@]}" "$term" --config "initial_cols=$cols" --config "initial_rows=$rows" start --always-new-process -- tmux attach -t "$session" >"$spawnlog" 2>&1 & ;;
     tilix)          "${SP[@]}" "$term" --geometry="$geo" -e "$attach"                >"$spawnlog" 2>&1 & ;;
+    terminator)     "${SP[@]}" "$term" --geometry="$geo" -e "$attach"                >"$spawnlog" 2>&1 & ;;
     gnome-terminal) "${SP[@]}" "$term" --geometry="$geo" -- tmux attach -t "$session" >"$spawnlog" 2>&1 & ;;
     xterm)          "${SP[@]}" "$term" -geometry "$geo"  -e "$attach"                >"$spawnlog" 2>&1 & ;;
     *)              "${SP[@]}" "$term" -e "$attach"                                   >"$spawnlog" 2>&1 & ;;

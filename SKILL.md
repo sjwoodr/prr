@@ -113,32 +113,40 @@ invoking Claude:
 If the skill argument names **more than one PR** (space-separated URLs or
 numbers, e.g. `/prr 101 102 103`):
 
-- **If `PRR_FANOUT` is set (`tmux` or `wezterm`) AND a graphical desktop is
-  available** — on Linux that means `DISPLAY` or `WAYLAND_DISPLAY` is set; on
-  macOS (`uname` = `Darwin`) it always is — hand the whole batch to the fan-out
-  router and do not review the PRs yourself. Run it **in the
-  background** (`run_in_background: true`); it blocks until every review
-  finishes, which is a long human-paced wait:
+Fan-out is **on by default** — the user does not have to opt in. Decide with
+three checks:
+
+1. **Not opted out** — `PRR_FANOUT` is not `off` (nor `none` / `false` / `0`).
+2. **A graphical desktop is available** — on Linux that means `DISPLAY` or
+   `WAYLAND_DISPLAY` is set; on macOS (`uname` = `Darwin`) it always is.
+3. **A backend is resolvable** — `PRR_FANOUT` names a backend (`tmux` /
+   `wezterm` / `terminator`), OR `PRR_FANOUT` is unset and `tmux` is on `PATH`
+   (the default backend).
+
+- **If all three hold** — hand the whole batch to the fan-out router and do not
+  review the PRs yourself. Run it **in the background** (`run_in_background:
+  true`); it blocks until every review finishes, which is a long human-paced
+  wait:
 
   ```
   ~/.claude/skills/prr/scripts/prr-fanout.sh <PR> <PR> [<PR> ...]
   ```
 
-  Invoke it **bare** (no `PRR_FANOUT=...` prefix, no pipe) — the variable is
-  already set in the environment when this gate fires, and a leading env
-  assignment or pipe would stop the permission allow-list from matching.
+  Invoke it **bare** (no `PRR_FANOUT=...` prefix, no pipe) — any value is already
+  in the environment when this gate fires, and a leading env assignment or pipe
+  would stop the permission allow-list from matching.
 
-  The router reads `PRR_FANOUT` and opens one window with a pane per PR (tiled
-  tmux panes, or wezterm-native panes), each running `/prr` on a single PR with
-  the approval gate fully intact. It closes each pane as that PR's review finishes
-  (it watches the result file `post-review.sh` writes), then prints a consolidated
-  rollup. Do **not** run steps 1-6 for the batch yourself. When the background
-  launcher exits, relay its rollup to the user.
+  The router resolves `PRR_FANOUT` (defaulting to `tmux` when unset) and opens one
+  window with a pane per PR, each running `/prr` on a single PR with the approval
+  gate fully intact. It closes each pane as that PR's review finishes (it watches
+  the result file `post-review.sh` writes), then prints a consolidated rollup. Do
+  **not** run steps 1-6 for the batch yourself. When the background launcher
+  exits, relay its rollup to the user.
 
-- **Otherwise** (`PRR_FANOUT` unset, no GUI, or the selected backend's tools are
-  missing) — fall back to reviewing the PRs **one at a time**: run the normal
-  single-PR flow (steps 1-6) for the first PR, then the next, and so on. Never
-  block on a missing GUI/backend.
+- **Otherwise** (opted out with `PRR_FANOUT=off`, no GUI, or no backend
+  resolvable — e.g. unset with no `tmux` on `PATH`) — fall back to reviewing the
+  PRs **one at a time**: run the normal single-PR flow (steps 1-6) for the first
+  PR, then the next, and so on. Never block on a missing GUI/backend.
 
 If the argument names a single PR, ignore this section and start at step 1.
 

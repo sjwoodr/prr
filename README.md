@@ -160,22 +160,36 @@ Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and
 /prr 101 102 103 104
 ```
 
-When `PRR_FANOUT` selects a backend, a multi-PR run opens **one window** with one
-pane per PR, each pane running `/prr` on a single PR. You review and **approve
-each post in its own pane** — the approval gate is never bypassed. As each review
-finishes, its pane closes; when the last one closes you get a consolidated rollup
-back in the original session.
+A multi-PR run opens **one window** with one pane per PR, each pane running
+`/prr` on a single PR. You review and **approve each post in its own pane** — the
+approval gate is never bypassed. As each review finishes, its pane closes; when
+the last one closes you get a consolidated rollup back in the original session.
 
-`PRR_FANOUT` picks the backend:
+**tmux is the recommended backend, and the one `prr` uses by default.** It is the
+most stable and proven path: portable across terminals, with a free auto-tiling
+grid. You do **not** need to opt in — when `PRR_FANOUT` is unset, a multi-PR run
+fans out with tmux automatically, as long as `tmux` is on your `PATH` and a
+graphical session is available. Set `PRR_FANOUT=off` to force sequential review
+instead.
 
-- **`PRR_FANOUT=tmux`** — one terminal running **tmux** with a tiled pane per PR.
-  Portable across terminals, free auto-tiling grid. The default (and what
-  `PRR_FANOUT=true` and the legacy `PRR_TMUX_FANOUT=true` normalize to).
+- **`PRR_FANOUT=tmux`** (the default) — one terminal running **tmux** with a
+  tiled pane per PR. `PRR_FANOUT=true` and the legacy `PRR_TMUX_FANOUT=true` are
+  aliases for it.
+
+The other backends are **reference implementations** — drop the tmux layer and
+drive a terminal's own splitting directly. They are kept mainly as a worked
+example for anyone who wants to extend the fan-out to a terminal that is not in
+the tmux backend's detection list. They are **not** the recommended path; reach
+for one only if tmux genuinely does not fit your setup:
+
 - **`PRR_FANOUT=wezterm`** — **wezterm-native** panes, no tmux (Linux only). See
   [the wezterm-native backend](#wezterm-native-backend-prr_fanoutwezterm) below.
+- **`PRR_FANOUT=terminator`** — **Terminator-native** panes via a generated
+  layout, no tmux (Linux/X11). Native GTK with focus-follows-mouse and
+  mouse-resizable panes; finished panes self-close after a short grace period.
 
-The skill routes through `scripts/prr-fanout.sh`, which reads `PRR_FANOUT` and
-hands off to `scripts/prr-fanout-tmux.sh` or `scripts/prr-fanout-wezterm.sh`.
+The skill routes through `scripts/prr-fanout.sh`, which resolves `PRR_FANOUT` and
+hands off to the matching `scripts/prr-fanout-<backend>.sh`.
 
 The wait between approvals is a plain shell sleep loop, so an idle batch (you
 walked away) costs **no tokens** — only the active reviews do.
@@ -186,26 +200,33 @@ or headless, or when the selected backend's tools are missing, the fan-out
 refuses and the PRs are reviewed **one at a time** instead (the normal single-PR
 flow per PR). A single-PR run ignores `PRR_FANOUT` entirely.
 
-Opt in (and tune) via environment:
+Tune (or opt out) via environment:
 
-- `PRR_FANOUT` — set to `tmux` or `wezterm` to enable the fan-out for multi-PR
-  runs and choose the backend (unset = sequential review). `true` and the legacy
-  `PRR_TMUX_FANOUT=true` both mean `tmux`.
+- `PRR_FANOUT` — controls fan-out for multi-PR runs:
+  - **unset** (default) — auto: fan out with **tmux** when `tmux` is on `PATH`
+    and a graphical session is present, otherwise review sequentially. No opt-in
+    needed to get the tmux fan-out.
+  - **`off`** (also `none` / `false` / `0`) — force **sequential** review; never
+    fan out, even with tmux installed.
+  - **`tmux`** — force the tmux backend (`true` and the legacy
+    `PRR_TMUX_FANOUT=true` are aliases).
+  - **`wezterm`** / **`terminator`** — use a reference backend instead (see the
+    backend list above). Single-PR runs ignore `PRR_FANOUT` entirely.
 - `PRR_FANOUT_TIMEOUT_MINS` — global wall-clock cap on the run; default `240`
   (4h). `0` disables the cap (safe, since waiting is token-free). On timeout the
   launcher stops, reports which PRs are still open, and **leaves your in-progress
   panes alone** (it prints the `tmux attach` command to finish them by hand).
 - `PRR_FANOUT_TERMINAL` — force the terminal, skipping detection. On **Linux**
-  the auto-detection order is `wezterm`, `tilix`, `gnome-terminal`,
-  `x-terminal-emulator` (the desktop default via `update-alternatives`), then
-  `xterm`. On **macOS** the
+  the auto-detection order is `tilix`, `terminator`, `wezterm`,
+  `gnome-terminal`, `x-terminal-emulator` (the desktop default via
+  `update-alternatives`), then `xterm`. On **macOS** the
   default is the built-in **Terminal.app**; set this to another terminal app name
   (e.g. `iTerm`, `Alacritty`) to override. The macOS override is best-effort: the
   app is opened on the attach command and a Terminal-style resize is attempted,
   but if the app ignores it the window just opens at its default size.
 - `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`; default
   `160x50`. On Linux it is applied via the terminal's geometry flag
-  (`tilix`/`gnome-terminal` `--geometry=`, `xterm` `-geometry`); on macOS the
+  (`tilix`/`terminator`/`gnome-terminal` `--geometry=`, `xterm` `-geometry`); on macOS the
   spawned window self-resizes with a terminal escape that Terminal.app honors.
   Terminals that ignore the escape (or other Linux terminals) open at their
   default size — the panes still tile evenly and re-tile if you resize the
