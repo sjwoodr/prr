@@ -141,15 +141,19 @@ mkdir -p "$scriptdir"
 # Self-contained config. focus = mouse preserves the hover-focus this backend
 # exists for; exit_action = close lets a pane close once its command exits (the
 # claude REPL keeps it open until you quit claude); suppress_multiple_term_dialog
-# skips the "close N terminals?" prompt when you close the window.
+# skips the "close N terminals?" prompt when you close the window. handle_size
+# widens the otherwise 1px (ungrabbable) pane dividers so panes can be mouse-
+# resized; show_titlebar = False drops the gray per-pane header bar.
 {
   echo "[global_config]"
   echo "  focus = mouse"
   echo "  suppress_multiple_term_dialog = True"
+  echo "  handle_size = 3"
   echo "[profiles]"
   echo "  [[default]]"
   echo "    scrollback_lines = 5000"
   echo "    exit_action = close"
+  echo "    show_titlebar = False"
   echo "[layouts]"
   echo "  [[$LAYOUT]]"
 } > "$cfg"
