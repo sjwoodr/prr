@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 # prr-fanout.sh — multi-PR fan-out router. Selects a backend from
-# PRR_FANOUT=[tmux|wezterm] and hands the whole batch to prr-fanout-<backend>.sh:
+# PRR_FANOUT=[tmux|wezterm|terminator] and hands the whole batch to
+# prr-fanout-<backend>.sh:
 #
-#   tmux     -> prr-fanout-tmux.sh    one window, a tiled tmux pane per PR
-#                                     (portable; the default backend)
-#   wezterm  -> prr-fanout-wezterm.sh wezterm-native panes, no tmux (Linux only)
+#   tmux       -> prr-fanout-tmux.sh       one window, a tiled tmux pane per PR
+#                                          (portable; the default backend)
+#   wezterm    -> prr-fanout-wezterm.sh    wezterm-native panes, no tmux (Linux only)
+#   terminator -> prr-fanout-terminator.sh Terminator-native panes via a generated
+#                                          layout, no tmux (Linux/X11; finished
+#                                          panes do not auto-close)
 #
 # Each backend does the real work and its own guards (GUI present, tools on PATH,
 # etc.); this script only resolves the selection and execs. The human approval
 # gate lives in the per-PR `/prr` review, untouched by either backend.
 #
 # Config (env):
-#   PRR_FANOUT   "tmux" or "wezterm". Unset => refuse with exit 3 (the skill then
+#   PRR_FANOUT   "tmux", "wezterm", or "terminator". Unset => refuse with exit 3 (the skill then
 #                reviews sequentially). Back-compat: PRR_FANOUT=true and the legacy
 #                PRR_TMUX_FANOUT=true both normalize to "tmux".
 #   (PRR_FANOUT_TIMEOUT_MINS / PRR_FANOUT_GEOMETRY / PRR_FANOUT_TERMINAL are read
@@ -42,8 +46,8 @@ else
     || { echo "prr-fanout: PRR_FANOUT is not set; not fanning out." >&2; exit 3; }
 fi
 case "$backend" in
-  tmux|wezterm) ;;
-  *) echo "prr-fanout: PRR_FANOUT must be 'tmux' or 'wezterm' (got '$backend')." >&2; exit 3 ;;
+  tmux|wezterm|terminator) ;;
+  *) echo "prr-fanout: PRR_FANOUT must be 'tmux', 'wezterm', or 'terminator' (got '$backend')." >&2; exit 3 ;;
 esac
 
 # Hand off to the selected backend. Export the normalized value so the backend's
