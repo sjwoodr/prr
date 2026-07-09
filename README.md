@@ -379,10 +379,21 @@ chat reaction, this is fully opt-in and off unless you add one line to your
 `post-review.sh`, on both the posted and declined paths). It is keyed per
 session, so parallel fan-out panes each show their own PR. When idle it prints
 `~/path (branch) <ctx>` instead — the directory, git branch, and current context
-size (e.g. `886k`), never the model. Both forms are capped at 70 characters by
-default (override with the `PRR_STATUSLINE_WIDTH` env var, set the same way as
-`PRR_FANOUT`), trimmed with a trailing `...`; the context count is kept out of
-that trim so it stays visible.
+size against the window (e.g. `270k/1M`), never the model. The context figure is
+real input-token occupancy: it includes the system prompt, tool definitions, and
+injected context (CLAUDE.md, rules, memory) plus history, not just conversation
+text. Both forms are capped at 70 characters by default (override with the
+`PRR_STATUSLINE_WIDTH` env var, set the same way as `PRR_FANOUT`), trimmed with a
+trailing `...`; the context count is kept out of that trim so it stays visible.
+
+Both the usage and the window size come straight from Claude Code's own
+`context_window` block on the status-line stdin (`total_input_tokens` and
+`context_window_size`), so the denominator is always correct with no
+configuration. Older Claude Code builds that predate `context_window` fall back
+to summing the transcript's latest main-thread usage and inferring the window
+(a `1m` model marker, the `exceeds_200k_tokens` flag, or a >=200k measurement,
+else 200k). On that fallback path only, `PRR_STATUSLINE_CONTEXT_MAX` (accepts
+`1M`, `1000000`, or `200k`) can force the denominator.
 
 Enable it by pointing a `statusLine` command at the bundled script in
 `~/.claude/settings.json`:
