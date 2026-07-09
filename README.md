@@ -366,6 +366,53 @@ reuse its token:
 
 That is it — the next `/prr` run signals progress on the matching PR post.
 
+## Optional: PR status line (Claude Code)
+
+Show the PR you are currently reviewing on the Claude Code status line, and fall
+back to the working directory + git branch when no review is running. Like the
+chat reaction, this is fully opt-in and off unless you add one line to your
+`settings.json`.
+
+`scripts/prr-statusline.sh` reads the session id Claude Code pipes to a
+`statusLine` command and, while a review is in progress, prints the
+`prr: reviewing #<PR>` line `setup-review.sh` leaves in `/tmp` (cleared by
+`post-review.sh`, on both the posted and declined paths). It is keyed per
+session, so parallel fan-out panes each show their own PR. When idle it prints
+`~/path (branch)` instead — never the model. Either form is capped at 65
+characters (with a trailing `...` when trimmed) so a long branch name or deeply
+nested path cannot overrun the bar.
+
+Enable it by pointing a `statusLine` command at the bundled script in
+`~/.claude/settings.json`:
+
+```jsonc
+{
+  "statusLine": {
+    "type": "command",
+    "command": "<SKILL_DIR>/scripts/prr-statusline.sh"
+  }
+}
+```
+
+Or add it non-destructively with `jq` (merges into any existing settings, keeps
+your other keys):
+
+```bash
+SKILL_DIR="$HOME/.claude/skills/prr"   # adjust for Cursor / project-local installs
+SETTINGS="$HOME/.claude/settings.json"
+mkdir -p "$(dirname "$SETTINGS")"
+[ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
+tmp="$(mktemp)"
+jq --arg cmd "$SKILL_DIR/scripts/prr-statusline.sh" \
+   '.statusLine = {type: "command", command: $cmd}' \
+   "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+```
+
+If you already have a `statusLine`, that snippet replaces it — merge by hand to
+keep custom rendering. Nothing else depends on the config: `setup-review.sh` and
+`post-review.sh` always write and clear the tiny session-scoped state file, so if
+you never add the `statusLine` block nothing reads it and there is no effect.
+
 ## Requirements
 
 - **Claude Code**, or **Cursor** (2.4+) — `prr` uses the portable `SKILL.md`
@@ -425,6 +472,7 @@ prr/
 └── scripts/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
+    ├── prr-statusline.sh # optional: Claude Code status line (opt-in via settings.json)
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
     ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)
     ├── prr-fanout-wezterm.sh # backend: wezterm-native panes, no tmux (Linux only)

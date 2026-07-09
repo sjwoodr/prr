@@ -75,6 +75,9 @@ cleanup() {
         "/tmp/pr-${number}-comments.json" "/tmp/pr-${number}-review.json" \
         "/tmp/pr-${number}-reviews.json" "/tmp/pr-${number}-prior-review.json" \
         "/tmp/pr-${number}-since-diff.txt" "$marked"
+  # Clear the "reviewing PR #N" status-line marker for this session (opt-in
+  # statusLine, see setup-review.sh / README). Harmless if it was never written.
+  rm -f "/tmp/prr-status-${CLAUDE_CODE_SESSION_ID:-nosession}"
 }
 
 # No payload: cleanup-only mode (declined gate, self-review, re-review report).

@@ -222,3 +222,13 @@ if [[ "$mode" != "self-review" ]]; then
   python3 "$script_dir/slack_react.py" \
     --repo "$repo" --number "$number" --react eyes || true
 fi
+
+# Optional: show "reviewing PR #N" on the Claude Code status line for this
+# session. scripts/prr-statusline.sh renders this file if the user configured it
+# as a `statusLine` command (see README). Session-scoped (keyed on the same
+# session id the status line reads from stdin) so parallel fan-out panes each
+# show their own PR. Cleared by post-review.sh. Best-effort and harmless when no
+# statusLine is configured — nothing reads the file.
+title="$(jq -r '.title // empty' "$view" 2>/dev/null || true)"
+printf 'prr: reviewing #%s%s\n' "$number" "${title:+ - $title}" \
+  > "/tmp/prr-status-${CLAUDE_CODE_SESSION_ID:-nosession}" 2>/dev/null || true
