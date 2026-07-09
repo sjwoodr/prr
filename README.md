@@ -378,9 +378,11 @@ chat reaction, this is fully opt-in and off unless you add one line to your
 `prr: reviewing #<PR>` line `setup-review.sh` leaves in `/tmp` (cleared by
 `post-review.sh`, on both the posted and declined paths). It is keyed per
 session, so parallel fan-out panes each show their own PR. When idle it prints
-`~/path (branch)` instead — never the model. Either form is capped at 65
-characters (with a trailing `...` when trimmed) so a long branch name or deeply
-nested path cannot overrun the bar.
+`~/path (branch) <ctx>` instead — the directory, git branch, and current context
+size (e.g. `886k`), never the model. Both forms are capped at 70 characters by
+default (override with the `PRR_STATUSLINE_WIDTH` env var, set the same way as
+`PRR_FANOUT`), trimmed with a trailing `...`; the context count is kept out of
+that trim so it stays visible.
 
 Enable it by pointing a `statusLine` command at the bundled script in
 `~/.claude/settings.json`:
