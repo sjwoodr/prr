@@ -286,8 +286,14 @@ it makes yourself before trusting it.
   easy to break when copying structure from prior context. Exclude the
   contents of any ` ```suggestion ` block from this check - that is
   verbatim code, not prose.
-- Choose a verdict: `APPROVE` (no blockers), `REQUEST_CHANGES`, or
-  `COMMENT`.
+- Choose a verdict. Heavily prefer a decisive `APPROVE` or
+  `REQUEST_CHANGES`: `APPROVE` when there are no blocking findings (nits
+  and non-blocking suggestions are fine to approve alongside),
+  `REQUEST_CHANGES` when at least one finding should block the merge.
+  Reserve `COMMENT` for the narrow case where you genuinely cannot decide
+  because the change is unclear and you need more information from the
+  author before you can approve or request changes - if you can form a
+  view, pick one of the other two.
 
 ## 5. Approval gate — STOP HERE
 
@@ -433,8 +439,10 @@ Show the user:
 - A per-finding status list — Fixed / Partially fixed / Not addressed /
   Unclear — each with its evidence.
 - Any regression noticed in R2.
-- A proposed updated verdict: `APPROVE` if every blocker is fixed,
-  otherwise `REQUEST_CHANGES` or `COMMENT`.
+- A proposed updated verdict, decisive by default: `APPROVE` if every
+  blocker is fixed, otherwise `REQUEST_CHANGES`. Only fall back to
+  `COMMENT` if it is genuinely unclear whether the blockers were
+  addressed and you need more information from the author to decide.
 
 Ask what to do. Post nothing until the user explicitly says so.
 
