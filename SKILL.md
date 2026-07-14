@@ -332,6 +332,16 @@ containing:
   the chat integration is not configured it is silently ignored, so it is safe
   to always include.
 
+  **Address the author in the second person.** The reply lands in the thread
+  under the author's own PR post, so you are talking *to* them, not *about*
+  them to a room. Say "you fixed", not "they fixed"; "your PR", not "the
+  author's PR". Better still, keep the author out of the sentence and just
+  describe what you did: "Re-reviewed, everything from last pass is fixed
+  including the isolation test, so approved." Third-person references to the
+  author read as if they are not in the room, which is the thing to avoid.
+  This applies to the re-review summary too, where the temptation to narrate
+  what changed since the last pass is strongest.
+
 Then run the post script, which submits the review in one call and
 removes the worktree and temp artifacts:
 
