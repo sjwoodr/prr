@@ -29,7 +29,8 @@
 # Config (env):
 #   PRR_FANOUT               must be "tmux" (the router sets this); test-mode bypasses it
 #   PRR_FANOUT_TIMEOUT_MINS  global wall-clock cap; default 240 (4h); 0 = no cap
-#   PRR_FANOUT_TERMINAL      force a terminal binary, skipping auto-detection
+#   PRR_FANOUT_TERMINAL      force a terminal, skipping auto-detection (a binary on
+#                            Linux, an app name on macOS e.g. iTerm / Ghostty / WezTerm)
 #   PRR_FANOUT_GEOMETRY      spawned window size as COLSxROWS; default 160x50
 #
 # Author: Steve Woodruff (@sjwoodr)
@@ -76,12 +77,35 @@ for r in "${refs[@]}"; do numbers+=("$(prnum "$r")"); done
 for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
 
 # --- pick a terminal ---------------------------------------------------------
-# macOS: built-in Terminal.app by default; PRR_FANOUT_TERMINAL overrides it
-# (best-effort, see the spawn below). Linux: tilix, terminator, wezterm,
-# gnome-terminal, x-terminal-emulator (the desktop default via
-# update-alternatives), xterm; PRR_FANOUT_TERMINAL forces a binary.
+# macOS: iTerm2 when it is installed, else the built-in Terminal.app;
+# PRR_FANOUT_TERMINAL overrides both (best-effort, see the spawn below). Linux:
+# tilix, terminator, wezterm, gnome-terminal, x-terminal-emulator (the desktop
+# default via update-alternatives), xterm; PRR_FANOUT_TERMINAL forces a binary.
+term_bundle=""   # macOS: bundle id, when we can resolve one (see the spawn below)
 if [[ "$os" == "Darwin" ]]; then
-  term="${PRR_FANOUT_TERMINAL:-Terminal}"
+  # macOS apps are not on PATH, so `command -v` cannot see them the way the Linux
+  # branch does. Ask LaunchServices instead: `id of app` resolves a bundle id
+  # WITHOUT launching the app. iTerm2 first, since someone who installed it is
+  # almost certainly using it over the built-in; Terminal.app always exists and is
+  # the guaranteed fallback.
+  #
+  # Keep the BUNDLE ID, not the name, and spawn with `open -b`. LaunchServices is
+  # lenient about names (both "iTerm" and "iTerm2" resolve to com.googlecode.iterm2)
+  # but `open -a` matches on the app bundle's actual name, so a name that probes
+  # clean can still fail to launch. The bundle id has no such ambiguity. An override
+  # is resolved the same way and falls back to `open -a` by name if it does not
+  # resolve, so an unusual PRR_FANOUT_TERMINAL still behaves as it did before.
+  probe_bundle() { osascript -e "id of app \"$1\"" 2>/dev/null || true; }
+  term="${PRR_FANOUT_TERMINAL:-}"
+  if [[ -n "$term" ]]; then
+    term_bundle="$(probe_bundle "$term")"
+  else
+    for t in iTerm iTerm2 Terminal; do
+      b="$(probe_bundle "$t")"
+      [[ -n "$b" ]] && { term="$t"; term_bundle="$b"; break; }
+    done
+    term="${term:-Terminal}"
+  fi
 else
   term=""
   for t in "${PRR_FANOUT_TERMINAL:-}" tilix terminator wezterm gnome-terminal x-terminal-emulator xterm; do
@@ -90,6 +114,7 @@ else
   [[ -n "$term" ]] \
     || { echo "$TAG: no supported terminal (tilix/terminator/wezterm/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
 fi
+echo "$TAG: terminal: $term"
 
 session="prr-fanout-$$"
 
@@ -132,8 +157,17 @@ if [[ "$os" == "Darwin" ]]; then
   cmdfile="${TMPDIR:-/tmp}/prr-fanout-$$.command"
   printf '#!/bin/sh\nprintf "\\033[8;%s;%st"\nexec %s\n' "$rows" "$cols" "$attach" > "$cmdfile"
   chmod +x "$cmdfile"
-  open -a "$term" "$cmdfile" 2>"$spawnlog" \
-    || echo "$TAG: could not open terminal '$term' (is it installed?)." >&2
+  # Prefer `open -b <bundle-id>`: it is exact, whereas `open -a <name>` matches on the
+  # bundle's real name and can miss an app that LaunchServices happily resolved under
+  # an alias (iTerm2 answers to both "iTerm" and "iTerm2"). Fall back to -a by name
+  # when no bundle id resolved, which is the pre-existing behavior.
+  if [[ -n "$term_bundle" ]]; then
+    open -b "$term_bundle" "$cmdfile" 2>"$spawnlog" \
+      || echo "$TAG: could not open terminal '$term' ($term_bundle)." >&2
+  else
+    open -a "$term" "$cmdfile" 2>"$spawnlog" \
+      || echo "$TAG: could not open terminal '$term' (is it installed?)." >&2
+  fi
 else
   if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi
   case "$term" in

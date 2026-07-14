@@ -219,11 +219,14 @@ Tune (or opt out) via environment:
 - `PRR_FANOUT_TERMINAL` — force the terminal, skipping detection. On **Linux**
   the auto-detection order is `tilix`, `terminator`, `wezterm`,
   `gnome-terminal`, `x-terminal-emulator` (the desktop default via
-  `update-alternatives`), then `xterm`. On **macOS** the
-  default is the built-in **Terminal.app**; set this to another terminal app name
-  (e.g. `iTerm`, `Alacritty`) to override. The macOS override is best-effort: the
-  app is opened on the attach command and a Terminal-style resize is attempted,
-  but if the app ignores it the window just opens at its default size.
+  `update-alternatives`), then `xterm`. On **macOS** the order is **iTerm2**, then
+  the built-in **Terminal.app** — macOS apps are not on `PATH`, so detection asks
+  LaunchServices (`osascript -e 'id of app "iTerm"'`), which resolves a bundle id
+  without launching anything. Set this to any app name (e.g. `Ghostty`, `WezTerm`,
+  `Alacritty`) to override. The window is spawned with `open -b <bundle-id>` when the
+  name resolves, and `open -a <name>` when it does not. Either way the resize is
+  best-effort: the app is opened on the attach command with a Terminal-style resize
+  escape, and if it ignores that, the window just opens at its default size.
 - `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`; default
   `160x50`. On Linux it is applied via the terminal's geometry flag
   (`tilix`/`terminator`/`gnome-terminal` `--geometry=`, `xterm` `-geometry`); on macOS the
