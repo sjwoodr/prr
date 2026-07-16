@@ -57,13 +57,23 @@ write_fanout_result() {
 }
 
 cleanup() {
-  # Local-worktree mode registers $wt as a git worktree; standalone mode
-  # leaves a throwaway repo directory. Handle both, and tolerate being run
-  # from outside any git repo.
-  if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-     && git worktree list --porcelain | grep -qF "$wt"; then
-    git worktree remove "$wt" --force
-    git worktree prune
+  # Local-worktree mode registers $wt as a git worktree; standalone mode leaves
+  # a throwaway repo directory. Handle both, and tolerate being run from outside
+  # any git repo.
+  #
+  # Resolve the main worktree from $wt itself BEFORE moving, then hop out of $wt
+  # and drive git with `git -C`. This makes removal work even when the caller's
+  # shell is parked inside $wt (a reviewer cd'd in, despite the skill saying not
+  # to) — otherwise `git worktree remove` and `rm -rf` both fail on the cwd with
+  # "Unable to read current working directory".
+  local main_wt
+  main_wt="$(git -C "$wt" worktree list --porcelain 2>/dev/null \
+             | awk '/^worktree /{print $2; exit}')"
+  cd /tmp 2>/dev/null || cd / || true
+  if [[ -n "$main_wt" && "$main_wt" != "$wt" ]] \
+     && git -C "$main_wt" worktree list --porcelain 2>/dev/null | grep -qF "$wt"; then
+    git -C "$main_wt" worktree remove "$wt" --force
+    git -C "$main_wt" worktree prune
     echo "worktree removed: $wt"
   elif [[ -e "$wt" ]]; then
     rm -rf "$wt"
@@ -107,11 +117,45 @@ event="$(jq -r '.event // "COMMENT"' "$marked")"
 ncomments="$(jq '.comments | length' "$marked")"
 echo "posting review to $repo #$number — event=$event, inline comments=$ncomments"
 
-# Post the review. If this fails, `set -e` aborts here BEFORE cleanup, so
-# the worktree and payload survive for a retry.
-gh api "repos/${repo}/pulls/${number}/reviews" \
-  --method POST --input "$marked" \
-  --jq '"posted review id=\(.id) state=\(.state) url=\(.html_url)"'
+# Post the review. The one common transient failure is a stale commit_id: the
+# PR head moved (rebase/force-push) after setup-review.sh pinned it, which
+# GitHub rejects with 422 "pull request has been updated since you started
+# reviewing". Re-resolve the head and retry once — that recovers the usual case
+# where the inline anchor lines still land. If the retry also fails (anchors now
+# stale), or it is any other error, leave the worktree and payload in place and
+# tell the reviewer how to recover, rather than silently dropping the review.
+post_review() {
+  gh api "repos/${repo}/pulls/${number}/reviews" \
+    --method POST --input "$marked" \
+    --jq '"posted review id=\(.id) state=\(.state) url=\(.html_url)"'
+}
+
+if out="$(post_review 2>&1)"; then
+  echo "$out"
+elif grep -qiE 'updated since you started reviewing' <<<"$out"; then
+  fresh_sha="$(gh pr view "$number" --repo "$repo" --json headRefOid -q .headRefOid 2>/dev/null || true)"
+  stale_sha="$(jq -r '.commit_id // empty' "$marked")"
+  if [[ -n "$fresh_sha" && "$fresh_sha" != "$stale_sha" ]]; then
+    echo "note: PR head moved since setup ($stale_sha -> $fresh_sha); retrying against the new head" >&2
+    tmp="$(mktemp)" && jq --arg s "$fresh_sha" '.commit_id = $s' "$marked" > "$tmp" && mv "$tmp" "$marked"
+    if out="$(post_review 2>&1)"; then
+      echo "$out"
+    else
+      echo "$out" >&2
+      echo "error: re-post against the new head failed too — the inline comment anchors are probably stale now." >&2
+      echo "       Re-run '$script_dir/setup-review.sh $number' (it picks up the new head) and rebuild the payload against the current diff. Worktree and payload left in place." >&2
+      exit 1
+    fi
+  else
+    echo "$out" >&2
+    echo "error: GitHub says the PR was updated but its head sha is unchanged ($stale_sha); not retrying blindly." >&2
+    echo "       Re-run '$script_dir/setup-review.sh $number' to refresh. Worktree and payload left in place." >&2
+    exit 1
+  fi
+else
+  echo "$out" >&2
+  exit 1
+fi
 
 # Optional: signal the review outcome on the team's PR chat post. No-op unless
 # both SLACK_BOT_TOKEN and PRR_CODE_REVIEWS_CHANNEL are set. We clear the
