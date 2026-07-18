@@ -98,7 +98,7 @@ jq --arg h "$HOME" '
     "Bash(\"$SKILL_DIR\"/scripts/setup-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/post-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/prr-fanout.sh:*)",
-    "Write(/tmp/pr-*-review.json)"
+    "Edit(/tmp/pr-*-review.json)"
   ]) as $new
   | .permissions.allow = ((.permissions.allow // []) + ($new - (.permissions.allow // [])))
 ' "$F" > "$TMP" && mv "$TMP" "$F"
@@ -123,8 +123,11 @@ Two notes:
   the command separately, so the un-allow-listed `tee` (or redirect) segment
   re-triggers a prompt even though the script itself is allowed. Both scripts
   already write their re-readable artifacts to `/tmp`, so there is nothing to
-  capture. A path matcher with a leading double slash (e.g. `Write(//tmp/**)`)
-  silently fails to match `/tmp/...` - use single-slash absolute paths.
+  capture. Two matcher gotchas for the payload-write rule: (1) it must be an
+  `Edit(...)` rule, not `Write(...)` - `Edit` rules cover every file-writing
+  tool (Write, Edit, NotebookEdit), while `Write(...)` rules match nothing and
+  only emit a startup warning; and (2) use a single-slash absolute path, since a
+  leading double slash (e.g. `//tmp/**`) silently fails to match `/tmp/...`.
 - These rules only silence the **permission** prompts. The "post this review?"
   question at the end of every review is a deliberate safety gate, not a
   permission prompt - it cannot (and should not) be allow-listed away. prr
