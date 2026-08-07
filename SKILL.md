@@ -302,34 +302,45 @@ Show the user:
 - Every drafted inline comment (file, line, body) verbatim.
 - The proposed verdict.
 
-Then end the message with a **numbered menu** and nothing else — no
-free-form "shall I post?" question, since the user answers with a single
-number. Which menu you show depends on the verdict from step 4. The
-numbering is fixed, so the same digit always means the same thing.
+Then ask with the **`AskUserQuestion` tool** — not a plain-text list, so the
+options are clickable instead of something the user has to type. The
+findings and the drafted comments go in your normal message text; the tool
+call is the last thing in the turn.
+
+Use a **single question**. Keep `header` short (roughly 12 characters, e.g.
+"Post review"). Each option's `label` is the action in a few words and its
+`description` is the consequence. Substitute the real inline-comment count
+for N so the choice is concrete. Which options you offer depends on the
+verdict from step 4:
 
 **Verdict `APPROVE`:**
 
-```
-1. Approve as recommended (with inline comments)
-2. Approve with no nits
-3. Post comment only - no approval
-4. Chat about this.
-```
+| label | description |
+|---|---|
+| Approve as recommended | Post APPROVE with all N inline comments. |
+| Approve with no nits | Post APPROVE, no inline comments. Nothing for the author to action. |
+| Comment only, no approval | Post the N comments as a COMMENT review. Does not approve. |
+| Chat about this | Post nothing yet, discuss the findings first. |
 
 **Verdict `REQUEST_CHANGES`:**
 
-```
-1. Post the REQUEST_CHANGES as recommended
-2. Change to COMMENT only
-3. Chat about this.
-```
+| label | description |
+|---|---|
+| Request changes as recommended | Post REQUEST_CHANGES with all N inline comments. |
+| Comment only, do not block | The same N comments as a COMMENT review, so the PR is not blocked. |
+| Chat about this | Post nothing yet, discuss the findings first. |
 
 **Verdict `COMMENT`:**
 
-```
-1. Post the COMMENT review as recommended
-2. Chat about this.
-```
+| label | description |
+|---|---|
+| Post the comment review | Post the COMMENT review with all N inline comments. |
+| Chat about this | Post nothing yet, discuss the findings first. |
+
+`AskUserQuestion` adds its own "Other" choice, so the user can always ask
+for something not listed — treat that as free-form and act on what they
+say. If the tool is unavailable in the host, fall back to offering the same
+options as a plain numbered list the user answers with a digit.
 
 What each option means when you act on it in step 6:
 
@@ -349,10 +360,10 @@ What each option means when you act on it in step 6:
   revised if the discussion changed the findings or the verdict. Repeat
   until the user picks a posting option.
 
-Post nothing until the user picks. A reply that clearly names one option
-("approve with no nits", "comment only", "2") maps straight to it. A bare
-"approve" or "yes" does NOT, whenever more than one option approves — ask
-which number instead of guessing, and post nothing until they answer.
+Post nothing until the user picks an option. If they answer in prose
+instead of choosing, a reply that names one option ("approve with no nits",
+"comment only") maps straight to it, but a bare "approve" or "yes" does NOT
+whenever more than one option approves — re-ask rather than guessing.
 
 The menu only decides **what gets posted**. It never changes the cleanup in
 step 6: whichever option the user picks, and even if they end up wanting
@@ -513,38 +524,46 @@ Show the user:
   `COMMENT` if it is genuinely unclear whether the blockers were
   addressed and you need more information from the author to decide.
 
-Then end the message with a **numbered menu**, same convention as step 5.
-Re-review keeps an extra option: posting nothing is a normal outcome here,
-so "report only" is always on the menu.
+Then ask with `AskUserQuestion`, same as step 5. Re-review always keeps a
+"report only" option, because posting nothing is a normal outcome here.
 
-**Verdict `APPROVE`:**
+`AskUserQuestion` allows at most **four** options per question, so pick the
+set that fits the situation. A re-review carries inline comments only on
+findings still open or newly regressed (see R4), so when everything is
+fixed there are none, and "as recommended" versus "with no inline
+comments" would be the same review — offer the second set instead of a
+distinction that does not exist.
 
-```
-1. Approve as recommended
-2. Approve with no inline comments
-3. Post comment only - no approval
-4. Report only - post nothing to the PR
-5. Chat about this.
-```
+**`APPROVE` with findings still open** (there are inline comments to post):
+
+| label | description |
+|---|---|
+| Approve as recommended | Post APPROVE with the N comments on what is still open. |
+| Approve with no inline comments | Post APPROVE, nothing inline. |
+| Report only | Post nothing to the PR. |
+| Chat about this | Post nothing yet, discuss first. |
+
+**`APPROVE` with everything fixed** (no inline comments exist):
+
+| label | description |
+|---|---|
+| Approve | Post APPROVE with the per-finding summary. |
+| Comment only, no approval | Post the summary as a COMMENT review. |
+| Report only | Post nothing to the PR. |
+| Chat about this | Post nothing yet, discuss first. |
 
 **Verdict `REQUEST_CHANGES`:**
 
-```
-1. Post the REQUEST_CHANGES as recommended
-2. Change to COMMENT only
-3. Report only - post nothing to the PR
-4. Chat about this.
-```
+| label | description |
+|---|---|
+| Request changes as recommended | Post REQUEST_CHANGES with the N inline comments. |
+| Comment only, do not block | The same comments as a COMMENT review. |
+| Report only | Post nothing to the PR. |
+| Chat about this | Post nothing yet, discuss first. |
 
 Options mean the same as in step 5; "report only" is the R4 report-only
-path (post nothing, clean up only). A re-review carries inline comments
-only on findings still open or newly regressed (see R4), so when
-everything is fixed there are none and options 1 and 2 are the same
-review — say so on the menu rather than offering a distinction that does
-not exist.
-
-Post nothing until the user picks. Same rule as step 5: if the reply does
-not map to exactly one option, ask which number.
+path (post nothing, clean up only). Post nothing until the user picks, and
+re-ask rather than guessing if a prose reply is ambiguous.
 
 ## R4. Post and clean up (only after approval)
 
