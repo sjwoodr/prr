@@ -432,7 +432,23 @@ option — run it with no payload argument to clean up only:
 
 Cleanup is not optional and is not conditional on the verdict or the menu
 pick. Every run ends with one of these two invocations, so the worktree and
-the `/tmp/pr-<N>-*` artifacts are always removed. Confirm the removal.
+the `/tmp/pr-<N>-*` artifacts are always removed.
+
+**The script verifies its own cleanup — do not run a check of your own.** Its
+last line is either:
+
+```
+cleanup verified: worktree gone, no /tmp/pr-<N>-* artifacts left
+```
+
+or, if something survived, `cleanup INCOMPLETE, still present: <paths>`. That
+line IS the confirmation; quote it and move on. Do not follow up with an
+`ls /tmp/pr-<N>-*` or `git worktree list | grep <N>` of your own. Such a
+command embeds the PR number in a pipeline, so it can never match the
+permission allow-list and forces an approval prompt on every review, to
+re-derive something the script already checked more thoroughly. If the line
+reports INCOMPLETE, say so and name the paths rather than trying to clean up
+by hand.
 
 **Self-review (`MODE: self-review`):** never build or post a payload. Always
 run the cleanup-only invocation (no payload argument) so nothing can reach
@@ -442,7 +458,8 @@ the PR:
 ~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number>
 ```
 
-Confirm the worktree is removed and report the result.
+Report the script's `cleanup verified:` line as the confirmation, same as
+above — no separate check.
 
 ### Optional: progress signals on a chat post
 
@@ -588,4 +605,5 @@ The user's menu pick from R3 maps to one of:
   Then run the post script with the payload.
 
 Either way, finish with `post-review.sh` so the worktree and artifacts are
-removed. Confirm removal and report the result.
+removed. Its own `cleanup verified:` / `cleanup INCOMPLETE:` line is the
+confirmation, exactly as in step 6 — do not run a separate check.

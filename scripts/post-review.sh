@@ -88,6 +88,34 @@ cleanup() {
   # Clear the "reviewing PR #N" status-line marker for this session (opt-in
   # statusLine, see setup-review.sh / README). Harmless if it was never written.
   rm -f "/tmp/prr-status-${CLAUDE_CODE_SESSION_ID:-nosession}"
+
+  # Verify rather than assume, and print one line the caller can trust as THE
+  # cleanup confirmation. The skill reads this and runs no follow-up check of
+  # its own: an ad hoc `ls /tmp/pr-N-*` + `git worktree list | grep N` pipeline
+  # embeds the PR number, so it can never match the permission allow-list and
+  # prompts for approval on every single review.
+  #
+  # Plain string rather than an array: bash 3.2 (stock macOS) errors on an
+  # empty array expansion under `set -u`. /tmp/prr-fanout-<n>.result is
+  # deliberately not checked -- it outlives cleanup for the fan-out rollup, and
+  # does not match this glob anyway.
+  local leftovers=""
+  if [[ -e "$wt" ]]; then
+    leftovers="$wt"
+  fi
+  local artifact
+  for artifact in "/tmp/pr-${number}-"*; do
+    # $wt is itself /tmp/pr-<n>-wt, so the glob re-matches it; skip to avoid
+    # naming the worktree twice in the INCOMPLETE line.
+    if [[ -e "$artifact" && "$artifact" != "$wt" ]]; then
+      leftovers="${leftovers:+$leftovers }$artifact"
+    fi
+  done
+  if [[ -n "$leftovers" ]]; then
+    echo "cleanup INCOMPLETE, still present: $leftovers"
+  else
+    echo "cleanup verified: worktree gone, no /tmp/pr-${number}-* artifacts left"
+  fi
 }
 
 # No payload: cleanup-only mode (declined gate, self-review, re-review report).
