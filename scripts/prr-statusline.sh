@@ -4,9 +4,10 @@
 # Claude Code pipes a JSON status blob on stdin. We read its session_id and, if
 # setup-review.sh has left a session-scoped "reviewing" file for this session,
 # print it. Otherwise fall back to the working directory + git branch + the
-# current context size (no model). Keyed by session id so parallel fan-out panes
+# current context size + model. Keyed by session id so parallel fan-out panes
 # never show each other's PR. Output is capped so a very long branch name or deep
-# path can't overrun the bar; the token count is protected from that trim.
+# path can't overrun the bar; the token count and model are protected from that
+# trim.
 #
 # Portable to macOS bash 3.2 (no `${var/#pat/repl}` substitution, POSIX-only).
 # No `set -e`: a status line should always emit something and never abort a render.
@@ -44,7 +45,7 @@ if [ -f "$state" ]; then
   exit 0
 fi
 
-# Idle: home-abbreviated cwd + git branch + current context size (no model).
+# Idle: home-abbreviated cwd + git branch + current context size + model.
 cwd="$(printf '%s' "$in" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)"
 [ -n "${cwd:-}" ] || cwd="$PWD"
 if [ "${cwd#$HOME}" != "$cwd" ]; then dir="~${cwd#$HOME}"; else dir="$cwd"; fi
@@ -110,10 +111,30 @@ else
   fi
 fi
 
+# Model label for the tail, e.g. "[Opus 5]". display_name is the human-facing
+# name Claude Code sends; fall back to the raw id so an unfamiliar build still
+# shows something rather than nothing.
+# Branch on the type first: some builds send .model as a bare string, and
+# indexing a string with .display_name is a jq error, not a null.
+model_label="$(printf '%s' "$in" | jq -r 'if (.model | type) == "string" then .model else (.model.display_name // .model.id // empty) end' 2>/dev/null)"
+# jq-free fallback, same approach as the session_id read above.
+if [ -z "${model_label:-}" ]; then
+  model_label="$(printf '%s' "$in" | grep -o '"display_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+fi
+# One line only: a stray newline would break the single-line render.
+model_label="${model_label%%$'\n'*}"
+
 main="$dir"
 [ -n "${branch:-}" ] && main="$main ($branch)"
-if [ -n "${tokens:-}" ]; then
-  emit "$main" " $tokens"
+
+# Both the token count and the model go in emit's suffix, which is never
+# trimmed, so a long path loses characters before either of them does.
+suffix=""
+[ -n "${tokens:-}" ] && suffix=" $tokens"
+[ -n "${model_label:-}" ] && suffix="$suffix [$model_label]"
+
+if [ -n "$suffix" ]; then
+  emit "$main" "$suffix"
 else
   emit "$main"
 fi

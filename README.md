@@ -386,13 +386,18 @@ chat reaction, this is fully opt-in and off unless you add one line to your
 `prr: reviewing #<PR>` line `setup-review.sh` leaves in `/tmp` (cleared by
 `post-review.sh`, on both the posted and declined paths). It is keyed per
 session, so parallel fan-out panes each show their own PR. When idle it prints
-`~/path (branch) <ctx>` instead — the directory, git branch, and current context
-size against the window (e.g. `270k/1M`), never the model. The context figure is
-real input-token occupancy: it includes the system prompt, tool definitions, and
-injected context (CLAUDE.md, rules, memory) plus history, not just conversation
-text. Both forms are capped at 70 characters by default (override with the
-`PRR_STATUSLINE_WIDTH` env var, set the same way as `PRR_FANOUT`), trimmed with a
-trailing `...`; the context count is kept out of that trim so it stays visible.
+`~/path (branch) <ctx> [<model>]` instead — the directory, git branch, current
+context size against the window, and the model, e.g.
+`~/src/inbanx/platform (main) 270k/1M [Opus 5]`. The model comes from the
+status blob's `display_name`, falling back to the raw model id. The context
+figure is real input-token occupancy: it includes the system prompt, tool
+definitions, and injected context (CLAUDE.md, rules, memory) plus history, not
+just conversation text. Both forms are capped at 70 characters by default
+(override with the `PRR_STATUSLINE_WIDTH` env var, set the same way as
+`PRR_FANOUT`), trimmed with a trailing `...`; the context count and the model
+are kept out of that trim so they stay visible. Adding the model costs about
+nine characters of the cap, so on a deep path with a long branch name you may
+want to raise `PRR_STATUSLINE_WIDTH`.
 
 Both the usage and the window size come straight from Claude Code's own
 `context_window` block on the status-line stdin (`total_input_tokens` and
