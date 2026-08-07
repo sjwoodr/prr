@@ -24,7 +24,7 @@ A Claude Code *skill* is a packaged workflow you invoke with a slash command.
 - Drafts one **inline GitHub comment per finding**, anchored to a file and
   line.
 - **Stops at an approval gate** — shows you every drafted comment and the
-  proposed verdict, then a short **clickable menu** (approve as recommended,
+  proposed verdict, then a short **select menu** (approve as recommended,
   approve with no nits, comment only). Nothing is posted until you choose,
   and the prompt's own escape hatches let you discuss it first instead.
 - Submits the review through the GitHub CLI and removes the temporary checkout.
@@ -153,8 +153,40 @@ Or, from inside the PR's own repository, just `/prr 583`.
 | 2. Dual-source review | Your primary review runs alongside a background security agent. |
 | 3. Synthesize | Findings merged, de-duplicated, ranked blocker / notable / nit. |
 | 4. Draft comments | One inline comment per finding; when a fix is obvious and small, the comment carries a `suggestion` block so you can accept it with GitHub's "Commit suggestion" button. A decisive verdict is chosen — APPROVE (no blockers) or REQUEST_CHANGES (at least one blocker); COMMENT only when the change is too unclear to decide and needs author input. |
-| 5. Approval gate | You see every comment verbatim and the verdict, then pick from a clickable menu: approve as recommended / approve with no nits / comment only. REQUEST_CHANGES and re-reviews get their own options, and re-reviews add "report only". The prompt's built-in choices cover discussing it first. Nothing is posted yet. |
+| 5. Approval gate | You see every comment verbatim and the verdict, then pick from a select menu: approve as recommended / approve with no nits / comment only. REQUEST_CHANGES and re-reviews get their own options, and re-reviews add "report only". The prompt's built-in choices cover discussing it first. Nothing is posted yet. See [The approval gate](#the-approval-gate). |
 | 6. Post & clean up | Your pick is submitted (or nothing is, if you chose report only). The worktree and temp artifacts are removed either way. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
+
+### The approval gate
+
+Step 5 is the one you interact with, so it is worth knowing what to expect.
+The gate is asked through Claude Code's `AskUserQuestion` tool, so you **pick
+an option** instead of typing an answer. Arrow keys and `Enter` work in any
+renderer; clicking a row with the mouse additionally needs [fullscreen
+rendering](https://code.claude.com/docs/en/fullscreen) (`/tui fullscreen`) on
+Claude Code v2.1.208 or later. What you are offered depends on the verdict:
+
+| Verdict | Options |
+|---|---|
+| `APPROVE` | approve as recommended / approve with no nits / comment only, no approval |
+| `REQUEST_CHANGES` | request changes as recommended / comment only, do not block |
+| `COMMENT` | post the comment review / change to APPROVE / change to REQUEST_CHANGES |
+| Re-review | the same, plus **report only** (post nothing), since posting nothing is a normal re-review outcome |
+
+The tool appends two choices of its own below a separator: **Chat about this**
+and **Type something**. Either one posts nothing — you discuss first, and the
+menu comes back afterwards, revised if the discussion changed anything. `prr`
+deliberately does not add its own "chat" entry, because it would show up twice.
+
+**If your host has no `AskUserQuestion`** (an older Claude Code, or a
+non-Claude-Code install such as Cursor) the gate degrades to the same options
+as a plain numbered list you answer with a digit, with a "Chat about this"
+entry written in by hand since there is no built-in one to inherit. Seeing a
+list you have to type into, rather than one you arrow through, means you are
+on that path and not that something is broken.
+
+Whatever you pick, cleanup still runs. `post-review.sh` removes the worktree
+and the `/tmp/pr-<N>-*` artifacts and then checks its own work, ending with
+`cleanup verified: ...` or `cleanup INCOMPLETE, still present: <paths>`.
 
 ## Parallel multi-PR review (`PRR_FANOUT`)
 
