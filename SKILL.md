@@ -302,8 +302,63 @@ Show the user:
 - Every drafted inline comment (file, line, body) verbatim.
 - The proposed verdict.
 
-Ask whether to post. Post nothing until the user explicitly approves.
-If the user wants edits, revise and ask again.
+Then end the message with a **numbered menu** and nothing else — no
+free-form "shall I post?" question, since the user answers with a single
+number. Which menu you show depends on the verdict from step 4. The
+numbering is fixed, so the same digit always means the same thing.
+
+**Verdict `APPROVE`:**
+
+```
+1. Approve as recommended (with inline comments)
+2. Approve with no nits
+3. Post comment only - no approval
+4. Chat about this.
+```
+
+**Verdict `REQUEST_CHANGES`:**
+
+```
+1. Post the REQUEST_CHANGES as recommended
+2. Change to COMMENT only
+3. Chat about this.
+```
+
+**Verdict `COMMENT`:**
+
+```
+1. Post the COMMENT review as recommended
+2. Chat about this.
+```
+
+What each option means when you act on it in step 6:
+
+- **Approve as recommended** — `event: APPROVE` with every drafted inline
+  comment.
+- **Approve with no nits** — `event: APPROVE` with `comments: []`. Nothing
+  is posted for the author to action. The body may note in a sentence or
+  two that minor things were found and deliberately not raised, but must
+  not enumerate them - that would be the rollup comment step 4 forbids.
+- **Post comment only** — `event: COMMENT`, keeping every inline comment.
+  The feedback lands without an approval.
+- **Post the REQUEST_CHANGES as recommended** — `event: REQUEST_CHANGES`
+  with every drafted inline comment.
+- **Change to COMMENT only** — the same inline comments with
+  `event: COMMENT` instead, so the PR is not blocked.
+- **Chat about this** — post nothing. Discuss, then re-present the menu,
+  revised if the discussion changed the findings or the verdict. Repeat
+  until the user picks a posting option.
+
+Post nothing until the user picks. A reply that clearly names one option
+("approve with no nits", "comment only", "2") maps straight to it. A bare
+"approve" or "yes" does NOT, whenever more than one option approves — ask
+which number instead of guessing, and post nothing until they answer.
+
+The menu only decides **what gets posted**. It never changes the cleanup in
+step 6: whichever option the user picks, and even if they end up wanting
+nothing posted at all, the run still finishes with `post-review.sh` so the
+worktree and the `/tmp` artifacts are removed. The only option that defers
+cleanup is "Chat about this", and only until the follow-up pick lands.
 
 **Self-review (`MODE: self-review`):** there is nothing to post, so this is a
 report, not a gate. Deliver the same ranked findings, the drafted comments
@@ -349,12 +404,16 @@ removes the worktree and temp artifacts:
 ~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number> /tmp/pr-<N>-review.json
 ```
 
-If the user declined to post, run it with no payload argument to clean
-up only:
+If nothing is being posted — the user declined, or picked a report-only
+option — run it with no payload argument to clean up only:
 
 ```
 ~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number>
 ```
+
+Cleanup is not optional and is not conditional on the verdict or the menu
+pick. Every run ends with one of these two invocations, so the worktree and
+the `/tmp/pr-<N>-*` artifacts are always removed. Confirm the removal.
 
 **Self-review (`MODE: self-review`):** never build or post a payload. Always
 run the cleanup-only invocation (no payload argument) so nothing can reach
@@ -454,11 +513,42 @@ Show the user:
   `COMMENT` if it is genuinely unclear whether the blockers were
   addressed and you need more information from the author to decide.
 
-Ask what to do. Post nothing until the user explicitly says so.
+Then end the message with a **numbered menu**, same convention as step 5.
+Re-review keeps an extra option: posting nothing is a normal outcome here,
+so "report only" is always on the menu.
+
+**Verdict `APPROVE`:**
+
+```
+1. Approve as recommended
+2. Approve with no inline comments
+3. Post comment only - no approval
+4. Report only - post nothing to the PR
+5. Chat about this.
+```
+
+**Verdict `REQUEST_CHANGES`:**
+
+```
+1. Post the REQUEST_CHANGES as recommended
+2. Change to COMMENT only
+3. Report only - post nothing to the PR
+4. Chat about this.
+```
+
+Options mean the same as in step 5; "report only" is the R4 report-only
+path (post nothing, clean up only). A re-review carries inline comments
+only on findings still open or newly regressed (see R4), so when
+everything is fixed there are none and options 1 and 2 are the same
+review — say so on the menu rather than offering a distinction that does
+not exist.
+
+Post nothing until the user picks. Same rule as step 5: if the reply does
+not map to exactly one option, ask which number.
 
 ## R4. Post and clean up (only after approval)
 
-The user chooses one of:
+The user's menu pick from R3 maps to one of:
 
 - **Report only** — post nothing. Run the post script with no payload
   argument to clean up.

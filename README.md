@@ -24,7 +24,9 @@ A Claude Code *skill* is a packaged workflow you invoke with a slash command.
 - Drafts one **inline GitHub comment per finding**, anchored to a file and
   line.
 - **Stops at an approval gate** — shows you every drafted comment and the
-  proposed verdict, and posts nothing until you say yes.
+  proposed verdict, then a short **numbered menu** (approve as recommended,
+  approve with no nits, comment only, chat about it). Nothing is posted
+  until you pick a number.
 - Submits the review through the GitHub CLI and removes the temporary checkout.
 
 ## Installing
@@ -151,8 +153,8 @@ Or, from inside the PR's own repository, just `/prr 583`.
 | 2. Dual-source review | Your primary review runs alongside a background security agent. |
 | 3. Synthesize | Findings merged, de-duplicated, ranked blocker / notable / nit. |
 | 4. Draft comments | One inline comment per finding; when a fix is obvious and small, the comment carries a `suggestion` block so you can accept it with GitHub's "Commit suggestion" button. A decisive verdict is chosen — APPROVE (no blockers) or REQUEST_CHANGES (at least one blocker); COMMENT only when the change is too unclear to decide and needs author input. |
-| 5. Approval gate | You see every comment verbatim and the verdict. Nothing is posted yet. |
-| 6. Post & clean up | On your approval, the review is submitted and the worktree removed. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
+| 5. Approval gate | You see every comment verbatim and the verdict, then pick from a numbered menu: approve as recommended / approve with no nits / comment only / chat about it. REQUEST_CHANGES and re-reviews get their own lists, and re-reviews add a "report only" option. Nothing is posted yet. |
+| 6. Post & clean up | Your pick is submitted (or nothing is, if you chose report only). The worktree and temp artifacts are removed either way. Optionally reacts on the PR's chat-channel post (see [Optional: chat reaction](#optional-chat-reaction-on-the-pr-post)). |
 
 ## Parallel multi-PR review (`PRR_FANOUT`)
 
