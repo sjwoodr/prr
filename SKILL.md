@@ -313,6 +313,11 @@ Use a **single question**. Keep `header` short (roughly 12 characters, e.g.
 for N so the choice is concrete. Which options you offer depends on the
 verdict from step 4:
 
+**Do NOT add a "Chat about this" option.** The tool already appends one of
+its own, below a separator, alongside a free-text "Type something" choice.
+Adding your own duplicates it — the menu ends up listing "Chat about this"
+twice. Offer only the posting actions and let the built-ins cover the rest.
+
 **Verdict `APPROVE`:**
 
 | label | description |
@@ -320,7 +325,6 @@ verdict from step 4:
 | Approve as recommended | Post APPROVE with all N inline comments. |
 | Approve with no nits | Post APPROVE, no inline comments. Nothing for the author to action. |
 | Comment only, no approval | Post the N comments as a COMMENT review. Does not approve. |
-| Chat about this | Post nothing yet, discuss the findings first. |
 
 **Verdict `REQUEST_CHANGES`:**
 
@@ -328,19 +332,23 @@ verdict from step 4:
 |---|---|
 | Request changes as recommended | Post REQUEST_CHANGES with all N inline comments. |
 | Comment only, do not block | The same N comments as a COMMENT review, so the PR is not blocked. |
-| Chat about this | Post nothing yet, discuss the findings first. |
 
-**Verdict `COMMENT`:**
+**Verdict `COMMENT`:** the tool needs at least two options, and a COMMENT
+verdict means you could not decide, so offer both ways off the fence:
 
 | label | description |
 |---|---|
 | Post the comment review | Post the COMMENT review with all N inline comments. |
-| Chat about this | Post nothing yet, discuss the findings first. |
+| Change to APPROVE | Post the same N comments as an APPROVE instead. |
+| Change to REQUEST_CHANGES | Post the same N comments as a REQUEST_CHANGES instead. |
 
-`AskUserQuestion` adds its own "Other" choice, so the user can always ask
-for something not listed — treat that as free-form and act on what they
-say. If the tool is unavailable in the host, fall back to offering the same
-options as a plain numbered list the user answers with a digit.
+If the user takes the built-in chat option, or answers through "Type
+something", post nothing: discuss, then ask again with the same tool, the
+options revised if the discussion changed the findings or the verdict.
+
+If `AskUserQuestion` is unavailable in the host, fall back to offering the
+same options as a plain numbered list the user answers with a digit, adding
+a "Chat about this" entry by hand since there is no built-in one to rely on.
 
 What each option means when you act on it in step 6:
 
@@ -350,15 +358,15 @@ What each option means when you act on it in step 6:
   is posted for the author to action. The body may note in a sentence or
   two that minor things were found and deliberately not raised, but must
   not enumerate them - that would be the rollup comment step 4 forbids.
-- **Post comment only** — `event: COMMENT`, keeping every inline comment.
-  The feedback lands without an approval.
-- **Post the REQUEST_CHANGES as recommended** — `event: REQUEST_CHANGES`
-  with every drafted inline comment.
-- **Change to COMMENT only** — the same inline comments with
-  `event: COMMENT` instead, so the PR is not blocked.
-- **Chat about this** — post nothing. Discuss, then re-present the menu,
-  revised if the discussion changed the findings or the verdict. Repeat
-  until the user picks a posting option.
+- **Comment only, no approval** / **Comment only, do not block** —
+  `event: COMMENT`, keeping every inline comment. The feedback lands
+  without an approval, and the PR is not blocked.
+- **Request changes as recommended** — `event: REQUEST_CHANGES` with every
+  drafted inline comment.
+- **Post the comment review** — `event: COMMENT` with every drafted inline
+  comment.
+- **Change to APPROVE** / **Change to REQUEST_CHANGES** — the same inline
+  comments under the event the user picked instead of the recommended one.
 
 Post nothing until the user picks an option. If they answer in prose
 instead of choosing, a reply that names one option ("approve with no nits",
@@ -527,12 +535,15 @@ Show the user:
 Then ask with `AskUserQuestion`, same as step 5. Re-review always keeps a
 "report only" option, because posting nothing is a normal outcome here.
 
-`AskUserQuestion` allows at most **four** options per question, so pick the
-set that fits the situation. A re-review carries inline comments only on
-findings still open or newly regressed (see R4), so when everything is
-fixed there are none, and "as recommended" versus "with no inline
-comments" would be the same review — offer the second set instead of a
-distinction that does not exist.
+Same rule as step 5: **do not add a "Chat about this" option**, the tool
+appends its own. `AskUserQuestion` allows at most four options per
+question, which these fit within.
+
+A re-review carries inline comments only on findings still open or newly
+regressed (see R4), so when everything is fixed there are none, and "as
+recommended" versus "with no inline comments" would be the same review.
+Offer the second set in that case rather than a distinction that does not
+exist.
 
 **`APPROVE` with findings still open** (there are inline comments to post):
 
@@ -540,8 +551,8 @@ distinction that does not exist.
 |---|---|
 | Approve as recommended | Post APPROVE with the N comments on what is still open. |
 | Approve with no inline comments | Post APPROVE, nothing inline. |
+| Comment only, no approval | Post the N comments as a COMMENT review. |
 | Report only | Post nothing to the PR. |
-| Chat about this | Post nothing yet, discuss first. |
 
 **`APPROVE` with everything fixed** (no inline comments exist):
 
@@ -550,7 +561,6 @@ distinction that does not exist.
 | Approve | Post APPROVE with the per-finding summary. |
 | Comment only, no approval | Post the summary as a COMMENT review. |
 | Report only | Post nothing to the PR. |
-| Chat about this | Post nothing yet, discuss first. |
 
 **Verdict `REQUEST_CHANGES`:**
 
@@ -559,7 +569,6 @@ distinction that does not exist.
 | Request changes as recommended | Post REQUEST_CHANGES with the N inline comments. |
 | Comment only, do not block | The same comments as a COMMENT review. |
 | Report only | Post nothing to the PR. |
-| Chat about this | Post nothing yet, discuss first. |
 
 Options mean the same as in step 5; "report only" is the R4 report-only
 path (post nothing, clean up only). Post nothing until the user picks, and
