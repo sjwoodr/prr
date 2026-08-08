@@ -188,6 +188,17 @@ Whatever you pick, cleanup still runs. `post-review.sh` removes the worktree
 and the `/tmp/pr-<N>-*` artifacts and then checks its own work, ending with
 `cleanup verified: ...` or `cleanup INCOMPLETE, still present: <paths>`.
 
+**If the author pushes while you are reviewing, the run stops rather than
+posting.** A review is a statement about specific code, so approving a head
+you never read is the one failure worth being strict about. The head is
+re-checked before the payload is built, and `post-review.sh` refuses to post
+when the payload's `commit_id` is no longer the live head. Recovering means
+re-running `setup-review.sh`, reading the commits that landed, and going back
+through the gate against the new head; the menu pick you already made does not
+carry over. There is no override flag, and the script no longer retargets a
+stale review to the new head on GitHub's 422 (it used to, which is exactly how
+an approval could land on unread commits).
+
 ## Parallel multi-PR review (`PRR_FANOUT`)
 
 Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and

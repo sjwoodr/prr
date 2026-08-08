@@ -198,9 +198,46 @@ Then:
     the skip in any drafted review body or inline comment — that detail
     belongs to the local workflow, not to the PR.
   - If no ticket/issue is linked, skip this bullet without comment.
-- Keep the **head sha** the script prints — step 6 needs it for `commit_id`.
+- Keep the **head sha** the script prints — step 6 needs it for `commit_id`,
+  and the moved-head rule below is stated against it.
 - All file inspection happens inside `/tmp/pr-<N>-wt`. Never check the PR
   out in the main working tree.
+
+### The head must not move under you
+
+A review is a statement about specific code. If commits land after you start,
+anything you post describes a tree that no longer exists, and an APPROVE in
+particular approves code you never read.
+
+**Re-check the head immediately before you build the payload in step 6**, and
+again if any noticeable time passes at the gate:
+
+```
+gh pr view <N> --repo <owner/repo> --json headRefOid --jq '.headRefOid'
+```
+
+If it differs from the sha you reviewed, **do not post**. Instead:
+
+1. Re-run `setup-review.sh <N>` to fetch and move the worktree to the new head.
+2. Read what landed: `git -C /tmp/pr-<N>-wt log --oneline <reviewed>..<new>`
+   and `git -C /tmp/pr-<N>-wt diff <reviewed>..<new>`.
+3. Fold the result into your findings. New commits can fix a finding, break
+   something that was fine, or be unrelated — you cannot tell without reading.
+4. **Return to the gate.** Re-present the findings and the menu against the new
+   head. A pick made against the old head is not consent to post against the new
+   one, no matter how small the delta looks.
+5. Only then build the payload, with `commit_id` set to the new head.
+
+This holds however trivial the new commits appear. "Lockfile only" and
+"docs only" are conclusions you reach by reading the diff, not by reading
+the commit subject.
+
+`post-review.sh` enforces the same rule as a backstop: it compares the
+payload's `commit_id` against the live head and refuses to post if they
+differ, and it no longer retargets a stale review to the new head on
+GitHub's 422 (that behaviour was the bug this rule exists to prevent).
+There is deliberately no override — reviewing the delta and rebuilding the
+payload is what makes the check pass.
 
 ## 2. Dual-source review
 
@@ -386,9 +423,13 @@ to post, and do not post — go straight to step 6 to clean up.
 
 ## 6. Post and clean up (only after approval)
 
+**First re-check the head** per the moved-head rule in step 1. If it moved,
+review the new commits and return to the gate before building anything.
+
 Build the review payload as a JSON file at `/tmp/pr-<N>-review.json`
 containing:
-- `commit_id` — the head sha from step 1
+- `commit_id` — the head sha you actually reviewed, which must still be the
+  live head (the post script refuses otherwise)
 - `event` — `APPROVE` / `REQUEST_CHANGES` / `COMMENT`
 - `body` — the review summary
 - `comments` — array of `{path, line, side, body}`. For a multi-line
@@ -597,7 +638,9 @@ The user's menu pick from R3 maps to one of:
 
 - **Report only** — post nothing. Run the post script with no payload
   argument to clean up.
-- **Post a follow-up review** — build `/tmp/pr-<N>-review.json` as in
+- **Post a follow-up review** — re-check the head first (step 1's moved-head
+  rule applies here too; a re-review is just as capable of approving commits
+  it never read). Then build `/tmp/pr-<N>-review.json` as in
   step 6, with `commit_id` set to the **current** head sha. The `body`
   summarizes the per-finding status; include inline `comments` only on
   findings that are still open or newly regressed (anchored on lines in

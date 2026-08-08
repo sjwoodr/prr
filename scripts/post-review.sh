@@ -143,15 +143,46 @@ jq 'del(.slack_summary)
 
 event="$(jq -r '.event // "COMMENT"' "$marked")"
 ncomments="$(jq '.comments | length' "$marked")"
+
+# Refuse to post a review pinned to a head that is no longer current. A moved
+# head means commits landed after the findings were formed, so the review was
+# not written against the code it would be approving. Retargeting it to the new
+# head (which this script used to do on GitHub's 422) turns that into an
+# approval of code nobody read.
+#
+# No override flag, on purpose: the way through is to review the commits that
+# landed and rebuild the payload with the new commit_id, and then this check
+# passes by itself. An escape hatch here would be an escape hatch around the
+# only thing enforcing that.
+#
+# Fail-open if the head cannot be resolved (network blip): GitHub's own 422
+# below is the backstop, and it no longer retries.
+payload_sha="$(jq -r '.commit_id // empty' "$marked")"
+live_sha="$(gh pr view "$number" --repo "$repo" --json headRefOid -q .headRefOid 2>/dev/null || true)"
+if [[ -n "$live_sha" && -n "$payload_sha" && "$live_sha" != "$payload_sha" ]]; then
+  echo "error: the PR head moved after this review was prepared; refusing to post." >&2
+  echo "         reviewed: $payload_sha" >&2
+  echo "         current:  $live_sha" >&2
+  echo "       Re-run '$script_dir/setup-review.sh $number' to fetch and move the worktree" >&2
+  echo "       to the new head, review what landed in between:" >&2
+  echo "         git -C /tmp/pr-${number}-wt log --oneline ${payload_sha}..${live_sha}" >&2
+  echo "         git -C /tmp/pr-${number}-wt diff ${payload_sha}..${live_sha}" >&2
+  echo "       then rebuild the payload with commit_id set to the new head." >&2
+  echo "       Worktree and payload left in place; nothing was posted." >&2
+  exit 1
+fi
+
 echo "posting review to $repo #$number — event=$event, inline comments=$ncomments"
 
-# Post the review. The one common transient failure is a stale commit_id: the
-# PR head moved (rebase/force-push) after setup-review.sh pinned it, which
-# GitHub rejects with 422 "pull request has been updated since you started
-# reviewing". Re-resolve the head and retry once — that recovers the usual case
-# where the inline anchor lines still land. If the retry also fails (anchors now
-# stale), or it is any other error, leave the worktree and payload in place and
-# tell the reviewer how to recover, rather than silently dropping the review.
+# Post the review. GitHub rejects a stale commit_id with 422 "pull request has
+# been updated since you started reviewing" — the same moved-head condition the
+# pre-flight check above catches, reached here when the head moved in the gap
+# between that check and this call, or when the check could not resolve the head.
+#
+# This used to re-resolve the head, rewrite commit_id and retry. That silently
+# posted the review against commits the reviewer never saw, which is the whole
+# problem: an APPROVE is a statement about specific code. Now it refuses and
+# says what to re-read. Never restore the retry.
 post_review() {
   gh api "repos/${repo}/pulls/${number}/reviews" \
     --method POST --input "$marked" \
@@ -163,23 +194,14 @@ if out="$(post_review 2>&1)"; then
 elif grep -qiE 'updated since you started reviewing' <<<"$out"; then
   fresh_sha="$(gh pr view "$number" --repo "$repo" --json headRefOid -q .headRefOid 2>/dev/null || true)"
   stale_sha="$(jq -r '.commit_id // empty' "$marked")"
-  if [[ -n "$fresh_sha" && "$fresh_sha" != "$stale_sha" ]]; then
-    echo "note: PR head moved since setup ($stale_sha -> $fresh_sha); retrying against the new head" >&2
-    tmp="$(mktemp)" && jq --arg s "$fresh_sha" '.commit_id = $s' "$marked" > "$tmp" && mv "$tmp" "$marked"
-    if out="$(post_review 2>&1)"; then
-      echo "$out"
-    else
-      echo "$out" >&2
-      echo "error: re-post against the new head failed too — the inline comment anchors are probably stale now." >&2
-      echo "       Re-run '$script_dir/setup-review.sh $number' (it picks up the new head) and rebuild the payload against the current diff. Worktree and payload left in place." >&2
-      exit 1
-    fi
-  else
-    echo "$out" >&2
-    echo "error: GitHub says the PR was updated but its head sha is unchanged ($stale_sha); not retrying blindly." >&2
-    echo "       Re-run '$script_dir/setup-review.sh $number' to refresh. Worktree and payload left in place." >&2
-    exit 1
-  fi
+  echo "$out" >&2
+  echo "error: the PR head moved while this review was being posted; nothing was posted." >&2
+  echo "         reviewed: ${stale_sha:-unknown}" >&2
+  echo "         current:  ${fresh_sha:-unresolved}" >&2
+  echo "       Re-run '$script_dir/setup-review.sh $number', review the commits that landed," >&2
+  echo "       and rebuild the payload with commit_id set to the new head." >&2
+  echo "       Worktree and payload left in place." >&2
+  exit 1
 else
   echo "$out" >&2
   exit 1
