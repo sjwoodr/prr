@@ -260,22 +260,83 @@ time; the two passes must overlap.
   `/tmp/pr-<N>-wt` so it can read surrounding code. A bare diff plus
   worktree is enough — do not delay the spawn to hand-feed it findings or
   `file:line` pointers; the agent explores on its own, and precise
-  briefing is not worth serializing the work behind your own review.
+  briefing is not worth serializing the work behind your own review. Do
+  include the output contract below, though: it is part of the brief, and
+  asking for the shape after the fact means re-running the agent.
 - **Source A** — your own primary review of the diff: correctness,
   project conventions, test coverage, and the obvious security surface.
   Do this while Source B runs in the background.
 
-Collect Source B's result once it completes. Verify any high-risk claim
-it makes yourself before trusting it.
+Collect Source B's result once it completes.
+
+### What Source B must return, and what to verify
+
+Ask for the prose report as now, followed by a fenced `json` block as the
+LAST thing in its message, matching this shape. The prose is what you read;
+the block is what you act on.
+
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker | notable | nit",
+      "title": "one line, the claim alone",
+      "file": "path under /tmp/pr-<N>-wt",
+      "line": 123,
+      "failure_scenario": "concrete inputs or sequence -> wrong outcome",
+      "fix": "what to change",
+      "verified": "read-the-code | inferred-from-diff | assumption",
+      "evidence": "what was actually read or run that supports this"
+    }
+  ],
+  "cleared": [
+    { "claim": "what was checked", "evidence": "what was read that cleared it" }
+  ]
+}
+```
+
+`verified` and `evidence` are the load-bearing fields and the whole reason
+for structuring this. `verified` says whether the agent opened the code that
+proves the finding or reasoned from the diff alone; `evidence` says what it
+actually read. A finding whose `evidence` merely restates its own `title` has
+not been checked, and that is now visible at a glance instead of buried in
+confident prose.
+
+⚠️ **A claim quantified over a set — every, all, none, only, the first — must
+name in `evidence` the members it actually enumerated.** Not hypothetical: a
+run of this skill reported "every other scheduled workflow in this repo wires
+Slack" when two of them do not. The quantifier is exactly where an agent's
+reach exceeds what it read, and naming the set is what exposes it.
+
+Then verify, before anything reaches step 3:
+
+- Every `blocker`, and every finding you would lead the review with.
+- Everything marked `inferred-from-diff` or `assumption`.
+- Every quantified claim, against the set its `evidence` names.
+
+`read-the-code` findings carrying real evidence still get spot-checked, but
+they are not where the errors are.
+
+If the block is missing or does not parse, do NOT re-run the agent: read the
+prose and verify more of it by hand. The contract speeds up synthesis, it is
+not a precondition for it.
 
 ## 3. Synthesize
 
 - Merge both passes. Dedupe overlapping findings.
 - Drop false positives and anything an existing review thread already
   covers (step 1).
+- Anything still unverified after step 2 is either dropped or stated plainly
+  as unverified, with what you could not confirm. Never present it as
+  established. An unverified finding is not a cheap finding, it is an
+  unsourced one, and the author checking it first is what costs the rest of
+  the review its credibility.
 - Keep only legitimate, evidence-backed findings. For each, cite
   `file:line` from the worktree.
 - Rank: blocker / notable / nit.
+- Carry Source B's `cleared` list into the report wherever it answers a
+  question the author would otherwise have to ask. Knowing what was examined
+  and found fine is half of what makes a review worth reading.
 
 ## 4. Draft inline comments
 
