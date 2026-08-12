@@ -199,6 +199,44 @@ carry over. There is no override flag, and the script no longer retargets a
 stale review to the new head on GitHub's 422 (it used to, which is exactly how
 an approval could land on unread commits).
 
+**The gate waits for the security agent** (`PRR_SOURCE_B_TIMEOUT`)
+
+The primary review pass usually finishes first. The gate does not open then --
+it opens when the background security agent returns, because otherwise you get
+asked to approve a set of findings, and then asked again when the agent lands
+with something the primary pass missed. The second ask is the problem: your
+first answer was given against findings you had been told were complete, so it
+cannot carry over, and the review you approved is not the review that would be
+posted.
+
+While it waits, the primary pass keeps verifying its own findings rather than
+idling.
+
+That wait is bounded, because an agent can also just never answer -- a stalled
+stream, a terminal API error, or a reply that comes back as a preamble with no
+report in it. A stub gets one resume (its context is intact, so resuming
+recovers the work where re-running from scratch would throw it away). A death
+does not. Past the cap, the review proceeds from the primary pass alone and
+says so, naming which of the three happened, since "died", "stubbed twice" and
+"still running at the cap" say different things about whether the missing pass
+is worth re-running later.
+
+- `PRR_SOURCE_B_TIMEOUT` — how long the gate waits for the security agent, in
+  seconds; default `600` (10 minutes); `0` = wait indefinitely. A non-numeric
+  or negative value logs a notice and falls back to the default rather than
+  silently disabling the wait, since a typo that reads as an expired budget
+  would quietly make every review single-source.
+
+```bash
+export PRR_SOURCE_B_TIMEOUT=900   # be more patient on large diffs
+export PRR_SOURCE_B_TIMEOUT=0     # never give up on the agent
+```
+
+For calibration, agent runs on real PRs have landed between roughly 100 and
+300 seconds, so the default leaves a wide margin. Raising it costs nothing
+except the wait itself; lowering it below about 300 makes single-source reviews
+routine, which defeats the point of having two passes.
+
 ## Parallel multi-PR review (`PRR_FANOUT`)
 
 Reviewing a batch (say a colleague's eight open PRs)? Pass several at once and
@@ -541,6 +579,7 @@ prr/
 └── scripts/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
+    ├── source-b-clock.sh # bounds how long the gate waits for the security agent
     ├── prr-statusline.sh # optional: Claude Code status line (opt-in via settings.json)
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
     ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)

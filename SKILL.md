@@ -283,7 +283,38 @@ returning is. If your own pass is done and the agent is still working, wait:
 re-read the diff, verify more of your own findings, check the tests. Idling
 is cheaper than an approval you have to withdraw.
 
-**The one exception is Source B failing**, which is a real and recurring
+**The wait is bounded.** Immediately after spawning Source B, start its
+clock:
+
+```
+~/.claude/skills/prr/scripts/source-b-clock.sh start <PR-number>
+```
+
+Then, whenever your own pass is done and Source B has not returned, ask the
+clock rather than guessing at elapsed time:
+
+```
+~/.claude/skills/prr/scripts/source-b-clock.sh check <PR-number>
+```
+
+It prints one line and always exits 0:
+
+- `VERDICT=wait` — budget remains. Keep verifying, then check again. Do not
+  gate.
+- `VERDICT=timeout` — the budget is spent. Treat it exactly like a death
+  below: proceed single-source and say so.
+- `VERDICT=nocap` — the user set `PRR_SOURCE_B_TIMEOUT=0`. There is no bound;
+  wait for Source B or for it to fail.
+- `VERDICT=nostamp` — you forgot to `start`. Stamp it now and keep waiting.
+  It deliberately does not read as an expired budget, because that would
+  silently turn every review single-source.
+
+The budget defaults to 600 seconds and is set by `PRR_SOURCE_B_TIMEOUT` (see
+the README). Do not implement the timeout yourself with date arithmetic, and
+do not substitute a `sleep`: the clock script is the one place the default,
+the override and the malformed-value fallback are handled.
+
+**The other exception is Source B failing**, which is a real and recurring
 outcome, not a hypothetical:
 
 - It **stubs** — the message comes back as a preamble ("I'll start by reading
@@ -293,10 +324,12 @@ outcome, not a hypothetical:
 - It **dies** — a terminal API error, a stall mid-stream. There is nothing to
   resume.
 
-After a failed resume, or a death, proceed single-source. Say so plainly in
-your report to the user, because it changes how much the review is worth:
-everything in it came from one pass. Do not let a dead agent block the gate
-indefinitely.
+After a failed resume, a death, or a `VERDICT=timeout`, proceed single-source.
+Say so plainly in your report to the user, and say which of the three it was:
+"the agent died", "the agent stubbed twice" and "the agent was still running
+at the 10-minute cap" mean different things about whether the missing pass is
+worth re-running later. Either way the review came from one pass, and the user
+should know that before they answer the gate.
 
 If Source B has already returned when your own pass finishes, there is
 nothing to wait for — synthesize and gate as normal.

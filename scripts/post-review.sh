@@ -81,10 +81,14 @@ cleanup() {
   else
     echo "pr checkout already gone: $wt"
   fi
+  # source-b-clock.sh writes the spawn stamp as /tmp/pr-<n>-sourceb-started, so
+  # it matches the verification glob below and MUST be removed here or every
+  # review ends on "cleanup INCOMPLETE".
   rm -f "/tmp/pr-${number}-view.json" "/tmp/pr-${number}-diff.txt" \
         "/tmp/pr-${number}-comments.json" "/tmp/pr-${number}-review.json" \
         "/tmp/pr-${number}-reviews.json" "/tmp/pr-${number}-prior-review.json" \
-        "/tmp/pr-${number}-since-diff.txt" "$marked"
+        "/tmp/pr-${number}-since-diff.txt" \
+        "/tmp/pr-${number}-sourceb-started" "$marked"
   # Clear the "reviewing PR #N" status-line marker for this session (opt-in
   # statusLine, see setup-review.sh / README). Harmless if it was never written.
   rm -f "/tmp/prr-status-${CLAUDE_CODE_SESSION_ID:-nosession}"
