@@ -269,6 +269,38 @@ time; the two passes must overlap.
 
 Collect Source B's result once it completes.
 
+### The gate WAITS for Source B
+
+**Do not present the step 5 gate until Source B has either returned or
+failed.** This is not a preference about thoroughness, it is about what the
+user's answer means. A pick made against a Source-A-only set of findings is
+not consent to post a different review, so when Source B lands afterwards
+with anything new the whole gate has to be run again — and the second ask is
+against findings the user has already been told were complete.
+
+Finishing Source A is therefore not the trigger for step 5. Source B
+returning is. If your own pass is done and the agent is still working, wait:
+re-read the diff, verify more of your own findings, check the tests. Idling
+is cheaper than an approval you have to withdraw.
+
+**The one exception is Source B failing**, which is a real and recurring
+outcome, not a hypothetical:
+
+- It **stubs** — the message comes back as a preamble ("I'll start by reading
+  the diff") with no report. Resume it ONCE with `SendMessage`, telling it to
+  deliver from what it already has and not to re-explore. Its context is
+  intact, so this recovers the work; re-running from scratch throws it away.
+- It **dies** — a terminal API error, a stall mid-stream. There is nothing to
+  resume.
+
+After a failed resume, or a death, proceed single-source. Say so plainly in
+your report to the user, because it changes how much the review is worth:
+everything in it came from one pass. Do not let a dead agent block the gate
+indefinitely.
+
+If Source B has already returned when your own pass finishes, there is
+nothing to wait for — synthesize and gate as normal.
+
 ### What Source B must return, and what to verify
 
 Ask for the prose report as now, followed by a fenced `json` block as the
@@ -395,10 +427,16 @@ not a precondition for it.
 
 ## 5. Approval gate — STOP HERE
 
+**Precondition: Source B has returned, or has failed per step 2.** Do not
+open this gate on a Source-A-only set of findings while the agent is still
+running. See "The gate WAITS for Source B" in step 2.
+
 Show the user:
 - The ranked findings.
 - Every drafted inline comment (file, line, body) verbatim.
 - The proposed verdict.
+- If Source B failed, one line saying so, so the user knows the review is
+  single-source before they answer.
 
 Then ask with the **`AskUserQuestion` tool** — not a plain-text list, so the
 options are clickable instead of something the user has to type. The

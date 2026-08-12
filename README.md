@@ -431,7 +431,7 @@ chat reaction, this is fully opt-in and off unless you add one line to your
 session, so parallel fan-out panes each show their own PR. When idle it prints
 `~/path (branch) <ctx> [<model>]` instead — the directory, git branch, current
 context size against the window, and the model, e.g.
-`~/src/inbanx/platform (main) 270k/1M [Opus 5]`. The model comes from the
+`~/src/platform (main) 270k/1M [Opus 5]`. The model comes from the
 status blob's `display_name`, falling back to the raw model id. The context
 figure is real input-token occupancy: it includes the system prompt, tool
 definitions, and injected context (CLAUDE.md, rules, memory) plus history, not
