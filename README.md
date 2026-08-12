@@ -77,8 +77,9 @@ and is harmless to ignore in Cursor.)
 ## Claude Code: skip the permission prompts (optional)
 
 During a review Claude Code asks you to approve the helper-script runs
-(`setup-review.sh`, `post-review.sh`, and `prr-fanout.sh` for the multi-PR
-fan-out) and the one file write of the review payload to
+(`setup-review.sh`, `post-review.sh`, `source-b-clock.sh` for the bounded
+security-agent wait, and `prr-fanout.sh` for the multi-PR fan-out) and the one
+file write of the review payload to
 `/tmp/pr-<N>-review.json`. To pre-approve just those (scoped to the prr
 scripts and that one payload path, nothing else), add them to your
 **user** settings allow-list. Requires `jq`; the command is idempotent, safe
@@ -93,12 +94,15 @@ jq --arg h "$HOME" '
   ([
     "Bash(\($h)/.claude/skills/prr/scripts/setup-review.sh:*)",
     "Bash(\($h)/.claude/skills/prr/scripts/post-review.sh:*)",
+    "Bash(\($h)/.claude/skills/prr/scripts/source-b-clock.sh:*)",
     "Bash(\($h)/.claude/skills/prr/scripts/prr-fanout.sh:*)",
     "Bash(~/.claude/skills/prr/scripts/setup-review.sh:*)",
     "Bash(~/.claude/skills/prr/scripts/post-review.sh:*)",
+    "Bash(~/.claude/skills/prr/scripts/source-b-clock.sh:*)",
     "Bash(~/.claude/skills/prr/scripts/prr-fanout.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/setup-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/post-review.sh:*)",
+    "Bash(\"$SKILL_DIR\"/scripts/source-b-clock.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/prr-fanout.sh:*)",
     "Edit(/tmp/pr-*-review.json)"
   ]) as $new
