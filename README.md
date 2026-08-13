@@ -398,6 +398,48 @@ back to the PR. (GitHub does not let you approve your own PR anyway, and the
 point is a fresh zero-knowledge read of your own work.) Self-review takes
 precedence over re-review.
 
+## Silent (stealth) mode
+
+```
+/prr silent 1266
+```
+
+Reviews the PR without your team seeing it happen. Silent mode changes nothing
+about what can reach GitHub — the approval gate still runs, and if you approve
+posting, the review lands in full with its inline comments and verdict — but the
+chat post gets no `:eyes:` when the review starts, no outcome reaction when it
+lands, and no threaded summary reply. Useful when you want to read something
+over before it becomes a visible review-in-progress, or when the channel does
+not need a running commentary of everything you look at.
+
+`silent` goes first, mirroring `test-mode`. `/prr 1266 silent` and the
+script-level `--silent` work too.
+
+This is not a fourth mode. It composes with all three, and it never overrides
+the approval gate: whatever you pick there still decides what reaches GitHub,
+including declining to post at all. The only thing silent changes is what
+reaches chat.
+
+Two details worth knowing:
+
+- **It sticks for the whole review.** `setup-review.sh --silent` records the
+  choice in `/tmp/pr-<N>-silent`, and `post-review.sh` reads it back rather than
+  needing the flag again. That matters because the two run far apart, and the
+  failure modes are lopsided: forgetting at setup leaves a stray `:eyes:`, while
+  forgetting at post announces your verdict and a summary in the thread. The
+  marker is cleared on any non-silent run of the same PR and swept by cleanup.
+- **Self-review already implies it.** Reviewing your own PR posts nothing back,
+  so there is nothing to announce. The scripts write the same marker for
+  self-review as for `--silent` and treat them as one rule, so you never need to
+  ask for both.
+
+Clearing an existing `:eyes:` still happens under stealth. Removing a reaction
+only ever takes a signal away, and skipping it would strand the marker from an
+earlier ordinary review of the same PR on the post permanently.
+
+If you want every review silent, just leave `PRR_CODE_REVIEWS_CHANNEL` unset —
+the whole chat integration is opt-in already.
+
 ## Optional: chat reaction on the PR post
 
 If your team announces each PR in a chat channel (with the GitHub pull URL),
@@ -406,6 +448,8 @@ If your team announces each PR in a chat channel (with the GitHub pull URL),
 - APPROVE -> `:white_check_mark:`
 - COMMENT or REQUEST_CHANGES -> `:speech_balloon:`
 - nothing posted (gate declined, self-review, re-review report-only) -> no reaction
+- [silent mode](#silent-stealth-mode) -> no reaction and no thread reply, even
+  though the review itself could be posted to GitHub
 
 It is fully opt-in and a no-op unless both of these are set in the environment:
 

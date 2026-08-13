@@ -4,15 +4,35 @@
 # a full review, a self-review of your own PR (full pass, report-only), or
 # a re-review of a PR you already reviewed.
 #
-# Usage:  setup-review.sh <PR-url-or-number> [owner/repo]
+# Usage:  setup-review.sh [--silent] <PR-url-or-number> [owner/repo]
 # A full PR URL works from any directory; a bare PR number must be run from
 # inside the PR's git repo.
+#
+# --silent is stealth mode: suppress every Slack signal for this review, so
+# nothing on the team's chat post says it is happening or how it ended.
 #
 # Author: Steve Woodruff (@sjwoodr)
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
-arg="${1:?usage: setup-review.sh <PR-url-or-number> [owner/repo]}"
+# Pull the stealth flag out of the arg list wherever it appears, so the
+# positional parsing below is unaffected by it. The bare `silent` spelling is
+# accepted alongside `--silent` because the skill's own front-door form reads
+# `/prr silent <PR>`, mirroring `/prr test-mode <PR>`.
+silent=0
+_args=()
+for _a in "$@"; do
+  case "$_a" in
+    --silent|silent) silent=1 ;;
+    *) _args+=("$_a") ;;
+  esac
+done
+# Guarded rather than a bare "${_args[@]}": bash 3.2 (stock macOS) errors on an
+# empty array expansion under `set -u`, and `setup-review.sh --silent` with no
+# PR is exactly that. Falling through to the usage error below is the point.
+if ((${#_args[@]})); then set -- "${_args[@]}"; else set --; fi
+
+arg="${1:?usage: setup-review.sh [--silent] <PR-url-or-number> [owner/repo]}"
 repo="${2:-}"
 
 # Accept a full GitHub PR URL or a bare number.
@@ -50,9 +70,12 @@ comments="/tmp/pr-${number}-comments.json"
 reviews="/tmp/pr-${number}-reviews.json"
 prior_json="/tmp/pr-${number}-prior-review.json"
 since_diff="/tmp/pr-${number}-since-diff.txt"
+silent_marker="/tmp/pr-${number}-silent"
 
-# Stale re-review artifacts from an earlier run would mislead the skill.
-rm -f "$prior_json" "$since_diff"
+# Stale artifacts from an earlier run would mislead the skill. The silent marker
+# is cleared here rather than left to the write below, so a stealth review of a
+# PR cannot make an ordinary review of that same PR quietly stealthy later.
+rm -f "$prior_json" "$since_diff" "$silent_marker"
 
 # Idempotent: drop whatever a previous run left at $wt. If it was a worktree
 # of the repo we are currently in, deregister it first; then clear the path.
@@ -192,6 +215,14 @@ artifacts:
   prior comments:  $comments
 EOF
 
+if ((silent)); then
+  cat <<EOF
+silent mode:
+  slack:           OFF for this review — no :eyes:, no outcome reaction, no
+                   thread reply. post-review.sh inherits this automatically.
+EOF
+fi
+
 if [[ "$mode" == "re-review" ]]; then
   cat <<EOF
 re-review context:
@@ -211,13 +242,31 @@ self-review context:
 EOF
 fi
 
+# Two different reasons to send the team no Slack signal, and they turn out to
+# be one rule. --silent is stealth: review the PR without the team seeing it
+# happen. self-review posts nothing back to the PR at all, so there is no
+# "someone is reviewing this" worth announcing either. They differ only in what
+# reaches GITHUB (silent still posts the review; self-review never does), which
+# is not this file's concern. So collapse them into one predicate rather than
+# testing two conditions in two scripts and risking one drifting from the other.
+#
+# Recorded as a marker file because post-review.sh runs as a separate
+# invocation, often a full review later. A flag it had to be re-passed would
+# rest on the skill remembering it, and the failure modes are not symmetric:
+# forgetting at setup leaves a stray :eyes:, while forgetting at post announces
+# the verdict and a thread summary, which is the thing stealth exists to
+# prevent. Marker means the property belongs to the review, not to one call.
+slack_quiet=0
+if ((silent)) || [[ "$mode" == "self-review" ]]; then
+  slack_quiet=1
+  : > "$silent_marker"
+fi
+
 # Optional: mark the team's PR chat post with :eyes: to show a review has
 # started. No-op unless SLACK_BOT_TOKEN and PRR_CODE_REVIEWS_CHANNEL are set.
 # Removed again by post-review.sh once the review is posted or cleaned up.
-# Skipped for self-review: reviewing your own PR posts nothing back, so there
-# is no "someone is reviewing this" signal worth showing the team.
 # Best-effort: never let it abort setup.
-if [[ "$mode" != "self-review" ]]; then
+if ((!slack_quiet)); then
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   python3 "$script_dir/slack_react.py" \
     --repo "$repo" --number "$number" --react eyes || true

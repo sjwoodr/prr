@@ -8,8 +8,10 @@ description: >-
   re-review — checking only whether your prior findings were addressed by the
   commits pushed since. Reviewing your own PR is auto-detected as a
   self-review: the same full fresh pass, but report-only with nothing posted
-  back to the PR. Use when the user runs /prr, asks to review a pull
-  request, or provides a PR URL or number to review.
+  back to the PR. `/prr silent <PR>` reviews stealthily: the approval gate and
+  GitHub posting work as usual, but the team's chat channel gets no signal at
+  all. Use when the user runs /prr, asks to review a pull request, or provides
+  a PR URL or number to review.
 ---
 
 <!--
@@ -65,6 +67,40 @@ project-local `.cursor/skills/prr`), use that path instead of
 Honour the mode the setup script reports. The only exception: if the user
 explicitly asks for a full review of an already-reviewed PR, run the full
 flow regardless.
+
+**Silent (stealth) reviews.** `silent` as the leading argument — `/prr silent
+1266`, mirroring `/prr test-mode` — suppresses every outbound Slack signal for
+that review: no `:eyes:` when it starts, no outcome reaction, no threaded
+reply. Pass it straight through as a flag:
+
+```
+~/.claude/skills/prr/scripts/setup-review.sh --silent <PR-url-or-number>
+```
+
+This is **not** a fourth mode. It is orthogonal to the three above and composes
+with all of them. It also changes nothing about what reaches GitHub: the
+approval gate in step 5 still runs exactly as written, and the user can still
+decline to post. Silent only means the team's chat post stays untouched
+whichever way that gate goes. The user's word for it is usually "stealth" —
+reviewing something without the team watching it happen in real time.
+
+Two things follow, and both matter:
+
+- **Do not re-pass it to `post-review.sh`.** `setup-review.sh --silent` records
+  the choice in `/tmp/pr-<N>-silent` and the post script reads it back on its
+  own. Stealth therefore belongs to the review rather than to your memory of a
+  flag from an hour ago — which is the point, because forgetting it at setup
+  merely leaves a stray `:eyes:`, while forgetting it at post announces the
+  verdict and a summary in the thread, exactly what the user was avoiding.
+- **Self-review already implies it.** Reviewing your own PR posts nothing back,
+  so there is nothing to announce; `setup-review.sh` writes the same marker for
+  self-review as for `--silent`. You never need to add `silent` to a
+  self-review, and the two are one rule in the scripts, not two.
+
+Clearing a pre-existing `:eyes:` still happens under stealth, since removing a
+reaction only ever takes a signal away. Without that, an ordinary review
+followed by a stealth re-review would strand "reviewing this" on the post for
+good.
 
 ## Tooling
 
@@ -157,6 +193,9 @@ Run the bundled setup script with the PR reference from the skill argument:
 ```
 ~/.claude/skills/prr/scripts/setup-review.sh <PR-url-or-number>
 ```
+
+Add `--silent` as the first argument if the user asked for a stealth review
+(see **Silent (stealth) reviews** above). Everything else is identical.
 
 It resolves owner/repo/number and checks out the PR head at
 `/tmp/pr-<N>-wt` — a detached `git worktree` when you are inside the PR's
@@ -596,6 +635,10 @@ removes the worktree and temp artifacts:
 ~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number> /tmp/pr-<N>-review.json
 ```
 
+Do NOT add `--silent` here even for a stealth review. The post script reads the
+marker `setup-review.sh` left and suppresses the Slack signals by itself; the
+flag exists only as a manual override for a cleanup-only run.
+
 If nothing is being posted — the user declined, or picked a report-only
 option — run it with no payload argument to clean up only:
 
@@ -640,8 +683,9 @@ If your team announces each PR as a one-liner (with the GitHub pull URL) in a
 chat channel, prr signals review progress on that post across the run:
 
 - **Review starts** (`setup-review.sh`) -> adds `:eyes:` to show a review is
-  underway. Skipped for self-review (your own PR posts nothing back, so there
-  is no review signal worth showing the team).
+  underway. Skipped when the review is silent: either `--silent` was passed, or
+  the mode is self-review (your own PR posts nothing back, so there is no review
+  signal worth showing the team). Those are one condition in the script, not two.
 - **Review is posted** (`post-review.sh` with a payload) -> removes the
   `:eyes:`, adds an outcome reaction, and drops a one-line plain-language reply
   in the post's thread (from `slack_summary` in the payload):
@@ -651,6 +695,10 @@ chat channel, prr signals review progress on that post across the run:
   `post-review.sh` runs cleanup-only: it removes the `:eyes:` so the marker
   never orphans, and adds no outcome reaction and no thread reply. Declining to
   post never leaves a signal on the chat channel beyond clearing the marker.
+- **Silent review** -> whatever the gate decides still reaches GitHub as usual,
+  but the chat post gets no outcome reaction and no thread reply. The `:eyes:`
+  unreact still runs, because removing a reaction only takes a signal away and
+  an earlier ordinary review of the same PR may have left one pinned there.
 
 The reactions are standard Slack emoji (no custom upload needed). This is fully
 opt-in and a no-op unless both environment variables are set:

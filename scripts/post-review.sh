@@ -3,8 +3,12 @@
 # Works for a first review and for a re-review follow-up.
 #
 # Usage:
-#   post-review.sh <PR-url-or-number> <payload.json> [owner/repo]   post + clean
-#   post-review.sh <PR-url-or-number>                               clean only
+#   post-review.sh [--silent] <PR-url-or-number> <payload.json> [owner/repo]
+#   post-review.sh [--silent] <PR-url-or-number>                  clean only
+#
+# --silent is stealth mode: post the review to GitHub as normal, but send no
+# Slack signal at all. Normally inherited from setup-review.sh via the
+# /tmp/pr-<n>-silent marker, so it does not have to be re-passed here.
 #
 # The payload JSON is built by the skill after the approval gate and must
 # contain: commit_id, event (APPROVE|REQUEST_CHANGES|COMMENT), body, comments[].
@@ -17,7 +21,21 @@
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
-arg="${1:?usage: post-review.sh <PR-url-or-number> [payload.json] [owner/repo]}"
+# Stealth flag, accepted anywhere in the arg list and stripped before the
+# positional parsing below. Usually redundant: setup-review.sh records the
+# choice in a marker file that this script picks up on its own (see below).
+silent=0
+_args=()
+for _a in "$@"; do
+  case "$_a" in
+    --silent|silent) silent=1 ;;
+    *) _args+=("$_a") ;;
+  esac
+done
+# Guarded expansion: bash 3.2 errors on an empty array under `set -u`.
+if ((${#_args[@]})); then set -- "${_args[@]}"; else set --; fi
+
+arg="${1:?usage: post-review.sh [--silent] <PR-url-or-number> [payload.json] [owner/repo]}"
 payload="${2:-}"
 repo="${3:-}"
 
@@ -33,7 +51,13 @@ fi
 
 wt="/tmp/pr-${number}-wt"
 marked="/tmp/pr-${number}-review.posted.json"
+silent_marker="/tmp/pr-${number}-silent"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# setup-review.sh records "send this review no outbound Slack signal" here, for
+# --silent and for self-review alike. Inheriting it means stealth survives the
+# gap between the two invocations without the skill having to remember a flag.
+[[ -f "$silent_marker" ]] && silent=1
 
 # Resolve the repo now so both the cleanup-only path and the post path can
 # address the team's PR chat post (to clear the :eyes: marker, etc.).
@@ -41,6 +65,13 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Best-effort: drop the :eyes: "review in progress" marker setup-review.sh
 # added. No-op unless the Slack env vars are set or the post is found.
+#
+# Deliberately NOT skipped under stealth, even though a silent setup never added
+# one. Removing a reaction only ever takes a signal away, so it cannot blow the
+# cover this is protecting, and skipping it would strand a real :eyes: in the
+# one case that matters: an ordinary review of this PR that added the marker,
+# followed by a stealth re-review. Leaving "steve is reviewing this" pinned to
+# the post forever is louder than the API call it costs to clear it.
 clear_eyes() {
   python3 "$script_dir/slack_react.py" \
     --repo "$repo" --number "$number" --unreact eyes || true
@@ -66,9 +97,18 @@ cleanup() {
   # shell is parked inside $wt (a reviewer cd'd in, despite the skill saying not
   # to) — otherwise `git worktree remove` and `rm -rf` both fail on the cwd with
   # "Unable to read current working directory".
-  local main_wt
-  main_wt="$(git -C "$wt" worktree list --porcelain 2>/dev/null \
-             | awk '/^worktree /{print $2; exit}')"
+  # Guarded on $wt existing, and `|| true` on the pipeline. Without both, an
+  # already-gone worktree makes `git -C "$wt"` fail to chdir, and `set -e` plus
+  # `pipefail` abort cleanup right here — exit 128, before a single artifact is
+  # removed and before the confirmation line the skill relies on. That turned a
+  # missing directory into every /tmp/pr-<n>-* file being left behind, which is
+  # the opposite of what this function is for. Reachable whenever cleanup runs
+  # twice, or the worktree was removed by hand between the two script calls.
+  local main_wt=""
+  if [[ -d "$wt" ]]; then
+    main_wt="$(git -C "$wt" worktree list --porcelain 2>/dev/null \
+               | awk '/^worktree /{print $2; exit}' || true)"
+  fi
   cd /tmp 2>/dev/null || cd / || true
   if [[ -n "$main_wt" && "$main_wt" != "$wt" ]] \
      && git -C "$main_wt" worktree list --porcelain 2>/dev/null | grep -qF "$wt"; then
@@ -84,10 +124,13 @@ cleanup() {
   # source-b-clock.sh writes the spawn stamp as /tmp/pr-<n>-sourceb-started, so
   # it matches the verification glob below and MUST be removed here or every
   # review ends on "cleanup INCOMPLETE".
+  # /tmp/pr-<n>-silent matches the verification glob too, so a stealth review
+  # would otherwise always end on "cleanup INCOMPLETE" — same trap as the
+  # source-b stamp above.
   rm -f "/tmp/pr-${number}-view.json" "/tmp/pr-${number}-diff.txt" \
         "/tmp/pr-${number}-comments.json" "/tmp/pr-${number}-review.json" \
         "/tmp/pr-${number}-reviews.json" "/tmp/pr-${number}-prior-review.json" \
-        "/tmp/pr-${number}-since-diff.txt" \
+        "/tmp/pr-${number}-since-diff.txt" "$silent_marker" \
         "/tmp/pr-${number}-sourceb-started" "$marked"
   # Clear the "reviewing PR #N" status-line marker for this session (opt-in
   # statusLine, see setup-review.sh / README). Harmless if it was never written.
@@ -217,14 +260,24 @@ fi
 # speech balloon for a COMMENT or REQUEST_CHANGES, "has feedback to read"), and
 # drop a short plain-language reply in the post's thread if the skill provided
 # one. Best-effort: the review is already posted, so never let this abort.
-case "$event" in
-  APPROVE) react_emoji="white_check_mark" ;;
-  *)       react_emoji="speech_balloon" ;;
-esac
-python3 "$script_dir/slack_react.py" \
-  --repo "$repo" --number "$number" \
-  --unreact eyes --react "$react_emoji" \
-  ${slack_summary:+--reply "$slack_summary"} || true
+# Under stealth the review still lands on GitHub in full; only the outcome
+# reaction and the thread reply are withheld. The :eyes: unreact still runs:
+# this path never calls clear_eyes (it folds the unreact into the same call
+# below), so skipping outright would strand a marker left by an earlier
+# ordinary review of this PR.
+if ((silent)); then
+  clear_eyes
+  echo "slack: silent mode — no outcome reaction and no thread reply"
+else
+  case "$event" in
+    APPROVE) react_emoji="white_check_mark" ;;
+    *)       react_emoji="speech_balloon" ;;
+  esac
+  python3 "$script_dir/slack_react.py" \
+    --repo "$repo" --number "$number" \
+    --unreact eyes --react "$react_emoji" \
+    ${slack_summary:+--reply "$slack_summary"} || true
+fi
 
 write_fanout_result posted "$event" "$ncomments"
 
