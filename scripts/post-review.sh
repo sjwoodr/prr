@@ -121,17 +121,34 @@ cleanup() {
   else
     echo "pr checkout already gone: $wt"
   fi
-  # source-b-clock.sh writes the spawn stamp as /tmp/pr-<n>-sourceb-started, so
-  # it matches the verification glob below and MUST be removed here or every
-  # review ends on "cleanup INCOMPLETE".
-  # /tmp/pr-<n>-silent matches the verification glob too, so a stealth review
-  # would otherwise always end on "cleanup INCOMPLETE" — same trap as the
-  # source-b stamp above.
-  rm -f "/tmp/pr-${number}-view.json" "/tmp/pr-${number}-diff.txt" \
-        "/tmp/pr-${number}-comments.json" "/tmp/pr-${number}-review.json" \
-        "/tmp/pr-${number}-reviews.json" "/tmp/pr-${number}-prior-review.json" \
-        "/tmp/pr-${number}-since-diff.txt" "$silent_marker" \
-        "/tmp/pr-${number}-sourceb-started" "$marked"
+  # Removal is a GLOB, deliberately the SAME pattern the verification loop below
+  # walks. It used to be a hand-maintained list of the filenames these scripts
+  # create, which meant removal covered strictly less than verification checked,
+  # and every new artifact had to be remembered or the review self-reported as
+  # littered. Two features already walked into that: the stealth marker and the
+  # source-b spawn stamp each shipped a fix adding themselves to the list.
+  #
+  # The case an enumeration can NEVER cover is the one that made this worth
+  # changing: files a review SESSION writes at runtime rather than a script.
+  # Drafting inline comment bodies or a review body to their own files (to dodge
+  # shell quoting when assembling the payload) is a reasonable thing for an
+  # assistant to do, and those names are invented on the spot, so no commit
+  # exists in which anyone could have listed them. They orphaned permanently and
+  # every later review of the same PR reported INCOMPLETE for them.
+  #
+  # $number is matched as [0-9]+ at parse time, so the prefix is always bounded
+  # and can never widen to something unrelated.
+  #
+  # rm -rf, not rm -f: a session can leave a DIRECTORY under the prefix, and
+  # rm -f would skip it, leaving verification to report it forever. $wt is
+  # skipped because it is handled above; without that, a failed worktree removal
+  # would come back here as an rm on a live git worktree.
+  local artifact
+  for artifact in "/tmp/pr-${number}-"*; do
+    if [[ -e "$artifact" && "$artifact" != "$wt" ]]; then
+      rm -rf "$artifact"
+    fi
+  done
   # Clear the "reviewing PR #N" status-line marker for this session (opt-in
   # statusLine, see setup-review.sh / README). Harmless if it was never written.
   rm -f "/tmp/prr-status-${CLAUDE_CODE_SESSION_ID:-nosession}"
@@ -150,7 +167,7 @@ cleanup() {
   if [[ -e "$wt" ]]; then
     leftovers="$wt"
   fi
-  local artifact
+  # `artifact` is already declared local by the removal loop above.
   for artifact in "/tmp/pr-${number}-"*; do
     # $wt is itself /tmp/pr-<n>-wt, so the glob re-matches it; skip to avoid
     # naming the worktree twice in the INCOMPLETE line.
