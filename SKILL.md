@@ -121,6 +121,35 @@ Throughout this workflow:
   call and is NOT silenceable via the permissions allow-list. Reading by
   absolute path avoids the prompt entirely and Read gives line numbers for
   the `file:line` citations step 3 needs.
+- **Do not run lint, type checks, or test suites. Read CI instead.** A review
+  is a reading exercise. The repo's own pipeline already runs those gates on
+  every PR, so reproducing them locally buys nothing and costs a lot: it means
+  installing dependencies, matching the repo's Node version, and waiting on a
+  full monorepo install, all to re-derive a result GitHub is already
+  computing. Read the check runs and report what they say:
+
+  ```
+  gh api repos/<owner>/<repo>/commits/<head-sha>/check-runs \
+    --jq '[.check_runs[] | .conclusion // "PENDING"] | group_by(.) | map({(.[0]): length}) | add'
+  ```
+
+  Two things follow. **Report CI honestly**: green, failing, and *still
+  pending* are three different states, and a review implying you saw a suite
+  pass when it was queued is worse than one that says nothing. **Do not hedge
+  about it either** — "I could not run tsc locally" is not a limitation worth
+  confessing, because nobody expected you to. Say it only when the change
+  genuinely hinges on something CI does not cover.
+
+  ⚠️ **The one thing CI cannot tell you is whether a new test is vacuous.** A
+  green suite proves the tests pass. It says nothing about whether a test
+  would still pass with the production change reverted, which is the
+  difference between coverage and proof, and is squarely a reviewer's
+  question. Answer it by *reading* the test against the diff — does the
+  assertion actually depend on the changed line? — not by running anything.
+  Where the author has demonstrated it (a pasted failure, a mutation check),
+  say so and credit it. Where you cannot tell from reading, say that plainly
+  or ask. Never assume a passing test is a meaningful one.
+
 - **Run the bundled scripts bare — never pipe them through `tee`.** Invoke
   `setup-review.sh` and `post-review.sh` exactly as documented, with no
   `2>&1 | tee /tmp/...` wrapper. Piping turns the call into a pipeline, and
