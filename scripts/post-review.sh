@@ -81,6 +81,22 @@ clear_eyes() {
 # (PRR_FANOUT_PANE set), drop a one-line result file that the launcher polls to
 # learn this PR is done and close its pane. Keyed on the PR number so the
 # launcher finds it. No-op outside fan-out.
+#
+# CALL THIS LAST, AFTER cleanup(). Writing it is what tells the launcher to kill
+# this pane, so anything still running when it lands can be cut off mid-flight.
+# It used to be called first, which raced cleanup and lost: a real run left the
+# worktree with its .git already removed but nothing else, so the registration
+# stayed prunable and 11 /tmp/pr-<n>-* artifacts orphaned. The next review of
+# that PR then died in setup with "cannot remove working tree: '.git' does not
+# exist" and had to be cleared by hand.
+#
+# cleanup() cannot delete this file: it globs /tmp/pr-<n>-*, and this is
+# /tmp/prr-fanout-<n>.result, a different prefix (see the note in cleanup).
+#
+# The tradeoff is deliberate. If cleanup dies, the result never lands and the
+# launcher waits instead of closing the pane, so the failure is visible in the
+# pane and named in the launcher's still-open list, rather than silent debris
+# that only surfaces on the next review of the same PR.
 write_fanout_result() {
   [[ -n "${PRR_FANOUT_PANE:-}" ]] || return 0
   printf 'pr=%s status=%s event=%s comments=%s\n' \
@@ -187,8 +203,8 @@ cleanup() {
 if [[ -z "$payload" ]]; then
   echo "cleanup-only: no payload given, not posting a review"
   clear_eyes
-  write_fanout_result not-posted
   cleanup
+  write_fanout_result not-posted
   exit 0
 fi
 
@@ -296,6 +312,6 @@ else
     ${slack_summary:+--reply "$slack_summary"} || true
 fi
 
-write_fanout_result posted "$event" "$ncomments"
-
 cleanup
+
+write_fanout_result posted "$event" "$ncomments"
