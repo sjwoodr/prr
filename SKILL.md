@@ -201,6 +201,18 @@ three checks:
   in the environment when this gate fires, and a leading env assignment or pipe
   would stop the permission allow-list from matching.
 
+  **A stealth batch must pass `silent` through**, the same way the single-PR
+  flow passes `--silent` to `setup-review.sh`:
+
+  ```
+  ~/.claude/skills/prr/scripts/prr-fanout.sh silent <PR> <PR> [<PR> ...]
+  ```
+
+  The router strips the flag and re-adds it to each pane's own `/prr` call, so
+  every review in the batch is stealthy. Omitting it does not fail loudly: the
+  batch runs fine and each pane announces itself in chat, which is precisely
+  what the user asked to avoid. `silent` and `test-mode` work in either order.
+
   The router resolves `PRR_FANOUT` (defaulting to `tmux` when unset) and opens one
   window with a pane per PR, each running `/prr` on a single PR with the approval
   gate fully intact. It closes each pane as that PR's review finishes (it watches

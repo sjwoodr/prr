@@ -33,7 +33,13 @@ pane_cmd() {
     printf 'echo "[TEST MODE] mock review of PR %s; finishing in %ss"; sleep %s; echo "pr=%s status=test comments=%s" > /tmp/prr-fanout-%s.result; echo "[TEST MODE] PR %s result written; waiting for launcher to close this pane"; sleep 600' \
       "$n" "$delay" "$delay" "$n" "$idx" "$n" "$n"
   else
-    printf 'PRR_FANOUT_PANE=1 claude "/prr %s"' "$ref"
+    # Stealth rides in as a leading `silent` on the pane's own /prr call, so each
+    # pane suppresses its own Slack signals exactly as `/prr silent <N>` would.
+    # PRR_FANOUT_SILENT is set by prr-fanout.sh; default 0 keeps a backend that is
+    # invoked directly behaving as before.
+    local silent=""
+    if [[ "${PRR_FANOUT_SILENT:-0}" == "1" ]]; then silent="silent "; fi
+    printf 'PRR_FANOUT_PANE=1 claude "/prr %s%s"' "$silent" "$ref"
   fi
 }
 

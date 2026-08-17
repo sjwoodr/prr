@@ -290,6 +290,16 @@ or headless, or when the selected backend's tools are missing, the fan-out
 refuses and the PRs are reviewed **one at a time** instead (the normal single-PR
 flow per PR). A single-PR run ignores `PRR_FANOUT` entirely.
 
+**The fan-out also needs bash >= 4** (the backends use associative arrays);
+single-PR reviews do not. This bites on **macOS**, which still ships bash 3.2 as
+`/bin/bash`, so `#!/usr/bin/env bash` picks 3.2 whenever a newer bash sits later
+on your `PATH` — and Homebrew's `bash` is often exactly that. `prr-fanout.sh`
+handles it: it looks for a bash >= 4 (`/opt/homebrew/bin/bash`,
+`/usr/local/bin/bash`, `/usr/bin/bash`) and hands that interpreter to the
+backend explicitly, since exec'ing the backend by path would just re-resolve its
+shebang back to 3.2. If it cannot find one, the fan-out declines and the PRs are
+reviewed one at a time — `brew install bash` is the fix.
+
 Tune (or opt out) via environment:
 
 - `PRR_FANOUT` — controls fan-out for multi-PR runs:
@@ -414,6 +424,12 @@ not need a running commentary of everything you look at.
 
 `silent` goes first, mirroring `test-mode`. `/prr 1266 silent` and the
 script-level `--silent` work too.
+
+It composes with the multi-PR fan-out: `/prr silent 1292 1293` makes every
+review in the batch stealthy. The skill hands it to the router as
+`prr-fanout.sh silent <PR> <PR>`, which re-adds it to each pane's own `/prr`
+call, so the panes are individually silent rather than trusting the launcher to
+suppress anything on their behalf.
 
 This is not a fourth mode. It composes with all three, and it never overrides
 the approval gate: whatever you pick there still decides what reaches GitHub,
