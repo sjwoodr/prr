@@ -569,7 +569,9 @@ Or add it non-destructively with `jq` (merges into any existing settings, keeps
 your other keys):
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/prr"   # adjust for Cursor / project-local installs
+# Single-quoted on purpose: this writes the literal string $HOME into the
+# config, rather than expanding it here and baking in an absolute path.
+SKILL_DIR='$HOME/.claude/skills/prr'   # adjust for Cursor / project-local installs
 SETTINGS="$HOME/.claude/settings.json"
 mkdir -p "$(dirname "$SETTINGS")"
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
@@ -578,6 +580,13 @@ jq --arg cmd "$SKILL_DIR/scripts/prr-statusline.sh" \
    '.statusLine = {type: "command", command: $cmd}' \
    "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
 ```
+
+Claude Code runs a `statusLine` command through a shell, so a literal `$HOME` in
+the config is expanded at run time. That is worth preferring over an absolute
+path if you use more than one machine: a config carrying `/home/you/...` renders
+nothing on a Mac (and vice versa), and it fails silently, because a `statusLine`
+command that cannot be found just draws an empty bar. An absolute path that is
+already working is fine and needs no change.
 
 If you already have a `statusLine`, that snippet replaces it — merge by hand to
 keep custom rendering. Nothing else depends on the config: `setup-review.sh` and
