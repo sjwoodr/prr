@@ -157,16 +157,53 @@ if [[ "$os" == "Darwin" ]]; then
   cmdfile="${TMPDIR:-/tmp}/prr-fanout-$$.command"
   printf '#!/bin/sh\nprintf "\\033[8;%s;%st"\nexec %s\n' "$rows" "$cols" "$attach" > "$cmdfile"
   chmod +x "$cmdfile"
+  spawned=0
+  # iTerm2 is driven through AppleScript so the reviews land in a NEW WINDOW.
+  # `open` hands the .command over as a document and lets iTerm2's own "open
+  # files in" preference decide, which on a default install is a TAB in the
+  # frontmost window. That is wrong twice over: the batch buries itself in the
+  # window you are already working in, and the CSI resize above then resizes
+  # THAT window instead of a fresh one. Creating the window explicitly is the
+  # only way to guarantee window-not-tab, and it scopes the resize to it.
+  #
+  # This costs an Automation permission prompt on first use. probe_bundle's
+  # `id of app` does NOT, because it only queries LaunchServices rather than
+  # controlling the app. If permission is denied, or iTerm2's AppleScript
+  # support is off, fall through to `open` and behave exactly as before.
+  if [[ "$term_bundle" == "com.googlecode.iterm2" ]]; then
+    osa="$(cat <<OSA
+tell application "iTerm"
+  activate
+  set prrWindow to (create window with default profile)
+  tell current session of prrWindow
+    try
+      set columns to $cols
+      set rows to $rows
+    end try
+    write text "exec $attach"
+  end tell
+end tell
+OSA
+)"
+    if osascript -e "$osa" >"$spawnlog" 2>&1; then
+      spawned=1
+    else
+      echo "$TAG: iTerm2 AppleScript spawn failed (see $spawnlog); falling back to 'open'." >&2
+    fi
+  fi
+
   # Prefer `open -b <bundle-id>`: it is exact, whereas `open -a <name>` matches on the
   # bundle's real name and can miss an app that LaunchServices happily resolved under
   # an alias (iTerm2 answers to both "iTerm" and "iTerm2"). Fall back to -a by name
   # when no bundle id resolved, which is the pre-existing behavior.
-  if [[ -n "$term_bundle" ]]; then
-    open -b "$term_bundle" "$cmdfile" 2>"$spawnlog" \
-      || echo "$TAG: could not open terminal '$term' ($term_bundle)." >&2
-  else
-    open -a "$term" "$cmdfile" 2>"$spawnlog" \
-      || echo "$TAG: could not open terminal '$term' (is it installed?)." >&2
+  if [[ "$spawned" -eq 0 ]]; then
+    if [[ -n "$term_bundle" ]]; then
+      open -b "$term_bundle" "$cmdfile" 2>"$spawnlog" \
+        || echo "$TAG: could not open terminal '$term' ($term_bundle)." >&2
+    else
+      open -a "$term" "$cmdfile" 2>"$spawnlog" \
+        || echo "$TAG: could not open terminal '$term' (is it installed?)." >&2
+    fi
   fi
 else
   if command -v setsid >/dev/null 2>&1; then SP=(setsid); else SP=(); fi

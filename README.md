@@ -323,14 +323,24 @@ Tune (or opt out) via environment:
   the built-in **Terminal.app** — macOS apps are not on `PATH`, so detection asks
   LaunchServices (`osascript -e 'id of app "iTerm"'`), which resolves a bundle id
   without launching anything. Set this to any app name (e.g. `Ghostty`, `WezTerm`,
-  `Alacritty`) to override. The window is spawned with `open -b <bundle-id>` when the
-  name resolves, and `open -a <name>` when it does not. Either way the resize is
-  best-effort: the app is opened on the attach command with a Terminal-style resize
-  escape, and if it ignores that, the window just opens at its default size.
+  `Alacritty`) to override. **iTerm2 is driven through AppleScript**
+  (`create window with default profile`) so the batch always lands in a new
+  **window**: handing iTerm2 a `.command` file via `open` lets its own "open files
+  in" preference decide, and on a default install that is a *tab* in the window you
+  are already working in — which also means the resize escape below resizes that
+  window rather than a fresh one. Every other macOS app is spawned with
+  `open -b <bundle-id>` when the name resolves and `open -a <name>` when it does
+  not, opened on the attach command with a Terminal-style resize escape; if the app
+  ignores that, the window just opens at its default size. The AppleScript path
+  needs macOS Automation permission for iTerm2 on first use (detection does not —
+  `id of app` only queries LaunchServices without controlling the app); if it is
+  denied or iTerm2's AppleScript support is off, prr falls back to `open`
+  automatically.
 - `PRR_FANOUT_GEOMETRY` — size of the spawned window as `COLSxROWS`; default
   `160x50`. On Linux it is applied via the terminal's geometry flag
-  (`tilix`/`terminator`/`gnome-terminal` `--geometry=`, `xterm` `-geometry`); on macOS the
-  spawned window self-resizes with a terminal escape that Terminal.app honors.
+  (`tilix`/`terminator`/`gnome-terminal` `--geometry=`, `xterm` `-geometry`); on macOS
+  iTerm2 has `columns`/`rows` set directly on the new window, and every other app
+  self-resizes with a terminal escape that Terminal.app honors.
   Terminals that ignore the escape (or other Linux terminals) open at their
   default size — the panes still tile evenly and re-tile if you resize the
   window. `wezterm` has no geometry flag, so the size is applied through its
