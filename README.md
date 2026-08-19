@@ -539,7 +539,11 @@ chat reaction, this is fully opt-in and off unless you add one line to your
 `scripts/prr-statusline.sh` reads the session id Claude Code pipes to a
 `statusLine` command and, while a review is in progress, prints the
 `prr: reviewing #<PR>` line `setup-review.sh` leaves in `/tmp` (cleared by
-`post-review.sh`, on both the posted and declined paths). It is keyed per
+`post-review.sh`, on both the posted and declined paths). The verb tracks the
+mode, so the three are distinguishable at a glance once the setup output has
+scrolled away: `prr: reviewing #<PR>` for a full pass, `prr: re-reviewing #<PR>`
+for an incremental one, and `prr: self-reviewing #<PR>` for your own PR (which
+posts nothing back). It is keyed per
 session, so parallel fan-out panes each show their own PR. When idle it prints
 `~/path (branch) <ctx> [<model>]` instead — the directory, git branch, current
 context size against the window, and the model, e.g.

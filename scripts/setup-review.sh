@@ -279,5 +279,14 @@ fi
 # show their own PR. Cleared by post-review.sh. Best-effort and harmless when no
 # statusLine is configured — nothing reads the file.
 title="$(jq -r '.title // empty' "$view" 2>/dev/null || true)"
-printf 'prr: reviewing #%s%s\n' "$number" "${title:+ - $title}" \
+# Verb tracks the mode. These are three different amounts of work with three
+# different endings - a re-review only checks prior findings, and a self-review
+# posts nothing back to the PR at all - and once the setup output has scrolled
+# away the bar is the only place that distinction is still visible.
+case "$mode" in
+  re-review)   verb="re-reviewing" ;;
+  self-review) verb="self-reviewing" ;;
+  *)           verb="reviewing" ;;
+esac
+printf 'prr: %s #%s%s\n' "$verb" "$number" "${title:+ - $title}" \
   > "/tmp/prr-status-${CLAUDE_CODE_SESSION_ID:-nosession}" 2>/dev/null || true
