@@ -648,16 +648,17 @@ containing:
   comment (needed when a `suggestion` block replaces more than one line,
   see step 4), also set `start_line` and `start_side` so the range is
   `start_line`..`line`; the suggestion replaces exactly that range.
-- `slack_summary` — optional. A single short, plain, informal sentence
-  summarizing the action you took, used as the threaded reply on the team's
-  PR chat post (see the chat-post section below). Write it the way a person
-  would in chat, not like an AI: e.g. "Reviewed it, looks good, approved with
-  a couple of non-blocking nits." or "Took a look, left a few change requests
-  on the auth path." Follow the same plain-ASCII writing rules as step 4 (no
-  em-dashes, no curly quotes, never the word "footgun"). The field is stripped
-  from the body before the review is posted to GitHub; it only feeds Slack. If
-  the chat integration is not configured it is silently ignored, so it is safe
-  to always include.
+- `slack_summary` — **required whenever the review posts** (i.e. every run
+  except a self-review, which posts nothing). A single short, plain,
+  informal sentence summarizing the action you took, used as the threaded
+  reply on the team's PR chat post (see the chat-post section below). Write
+  it the way a person would in chat, not like an AI: e.g. "Reviewed it,
+  looks good, approved with a couple of non-blocking nits." or "Took a look,
+  left a few change requests on the auth path." Follow the same plain-ASCII
+  writing rules as step 4 (no em-dashes, no curly quotes, never the word
+  "footgun"). The field is stripped from the body before the review is
+  posted to GitHub; it only feeds Slack. If the chat integration is not
+  configured it is silently ignored, so it is safe to always include.
 
   **Address the author in the second person.** The reply lands in the thread
   under the author's own PR post, so you are talking *to* them, not *about*
