@@ -120,14 +120,35 @@ cleanup() {
   # missing directory into every /tmp/pr-<n>-* file being left behind, which is
   # the opposite of what this function is for. Reachable whenever cleanup runs
   # twice, or the worktree was removed by hand between the two script calls.
+  #
+  # $wt is compared against git's own output below, which always prints the
+  # REALPATH of a worktree (symlinks resolved) — on macOS /tmp is a symlink to
+  # /private/tmp, so git reports /private/tmp/pr-<n>-wt while $wt is spelled
+  # /tmp/pr-<n>-wt. Canonicalize to $wt_real before any comparison. Without
+  # this, standalone mode's own main tree (git prints it as its OWN "worktree "
+  # line in its own porcelain output) was compared to $wt as bare strings: they
+  # differ, so the code assumed $wt was a LINKED tree of some other repo — and
+  # a later `grep -qF "$wt"` then "confirmed" that with a substring match,
+  # since "/private/tmp/pr-<n>-wt" contains "/tmp/pr-<n>-wt" as text. That sent
+  # a standalone checkout into `git worktree remove`, which git correctly
+  # refuses ("fatal: ... is a main working tree") since it IS the main tree —
+  # aborting cleanup before a single artifact was removed. Comparing realpaths,
+  # and matching the whole porcelain line instead of a substring, closes both
+  # holes: a real linked worktree of some OTHER repo still resolves to a
+  # different realpath than that repo's own main tree, so the true case this
+  # branch exists for is unaffected (verified: a linked `git worktree add`
+  # still hits the `git worktree remove` branch and succeeds).
+  local wt_real=""
+  [[ -d "$wt" ]] && wt_real="$(cd "$wt" 2>/dev/null && pwd -P)"
   local main_wt=""
-  if [[ -d "$wt" ]]; then
+  if [[ -n "$wt_real" ]]; then
     main_wt="$(git -C "$wt" worktree list --porcelain 2>/dev/null \
                | awk '/^worktree /{print $2; exit}' || true)"
   fi
   cd /tmp 2>/dev/null || cd / || true
-  if [[ -n "$main_wt" && "$main_wt" != "$wt" ]] \
-     && git -C "$main_wt" worktree list --porcelain 2>/dev/null | grep -qF "$wt"; then
+  if [[ -n "$main_wt" && -n "$wt_real" && "$main_wt" != "$wt_real" ]] \
+     && git -C "$main_wt" worktree list --porcelain 2>/dev/null \
+          | grep -qFx "worktree $wt_real"; then
     git -C "$main_wt" worktree remove "$wt" --force
     git -C "$main_wt" worktree prune
     echo "worktree removed: $wt"
