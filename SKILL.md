@@ -256,8 +256,11 @@ Then:
 - Read the diff, the PR description (`body` in the view JSON), and the
   changed-file list.
 - Read the prior review state (`reviews` and `comments` in the view JSON,
-  and `pr-<N>-comments.json` for inline threads). Note what other
-  reviewers (e.g. Copilot) already raised so step 3 does not duplicate it.
+  and `pr-<N>-comments.json` for inline threads). Keep a list of what
+  other reviewers (e.g. Copilot) already raised, and who raised each one.
+  That list is not a discard pile: step 3 keeps those findings out of your
+  inline comments, and step 4 acknowledges them in the summary body
+  instead.
 - **Linked ticket / issue context.** Scan the PR title and description
   for a linked Jira ticket (e.g. `https://<site>.atlassian.net/browse/KEY-NNNN`
   or a bare `KEY-NNNN` reference) or GitHub issue (`#NNNN`,
@@ -469,8 +472,18 @@ not a precondition for it.
 ## 3. Synthesize
 
 - Merge both passes. Dedupe overlapping findings.
-- Drop false positives and anything an existing review thread already
-  covers (step 1).
+- Drop false positives.
+- **A finding an existing review thread already covers (step 1) is not
+  dropped, it is moved.** Take it out of the inline set - the author does
+  not need the same comment twice - and put it on a **concurred** list that
+  step 4 names once in the summary body. Dropping it silently throws away
+  real information: two reviewers landing independently on the same line is
+  evidence the finding is real, and the author who was going to wave off a
+  bot comment now knows a second pass agrees with it.
+- Judge those findings on your own evidence rather than inheriting them.
+  Concur only where you actually checked and agree. If you checked and
+  think the existing comment is wrong, say so in the summary body - that is
+  worth more to the author than either an inline duplicate or silence.
 - Anything still unverified after step 2 is either dropped or stated plainly
   as unverified, with what you could not confirm. Never present it as
   established. An unverified finding is not a cheap finding, it is an
@@ -490,6 +503,14 @@ not a precondition for it.
   For a finding on a file not in the diff, anchor on the closest related
   line that is in the diff and name the real location in the body, or
   fall back to the review summary body.
+- **The summary body names what you concurred with.** One line per finding
+  on step 3's concurred list: what it is, where, and who raised it, e.g.
+  "Copilot's note on the isSuperAdmin gate in UserMenu.tsx is right - agree
+  it should be fixed before merge." No inline comment for it and no
+  re-arguing the case; the existing thread is where that conversation
+  lives. This is the one part of the body that lists findings, and it is
+  not the rollup comment banned below, because none of it is yours for the
+  author to action twice.
 - **Suggested fix blocks.** When the fix is obvious and small, end the
   comment body with a GitHub ` ```suggestion ` block so the author can
   accept it with the "Commit suggestion" button. Only do this when all of
@@ -547,6 +568,8 @@ running. See "The gate WAITS for Source B" in step 2.
 Show the user:
 - The ranked findings.
 - Every drafted inline comment (file, line, body) verbatim.
+- The concurred list from step 3, if any, so it is clear which findings are
+  going into the summary body instead of getting an inline comment.
 - The proposed verdict.
 - If Source B failed, one line saying so, so the user knows the review is
   single-source before they answer.
@@ -607,6 +630,8 @@ What each option means when you act on it in step 6:
   is posted for the author to action. The body may note in a sentence or
   two that minor things were found and deliberately not raised, but must
   not enumerate them - that would be the rollup comment step 4 forbids.
+  This does not touch the concurred list: those are other reviewers'
+  findings, not withheld nits of yours, and they stay in the body.
 - **Comment only, no approval** / **Comment only, do not block** —
   `event: COMMENT`, keeping every inline comment. The feedback lands
   without an approval, and the PR is not blocked.
@@ -643,7 +668,7 @@ containing:
 - `commit_id` — the head sha you actually reviewed, which must still be the
   live head (the post script refuses otherwise)
 - `event` — `APPROVE` / `REQUEST_CHANGES` / `COMMENT`
-- `body` — the review summary
+- `body` — the review summary, including the concurred list from step 4
 - `comments` — array of `{path, line, side, body}`. For a multi-line
   comment (needed when a `suggestion` block replaces more than one line,
   see step 4), also set `start_line` and `start_side` so the range is
