@@ -656,7 +656,29 @@ cleanup is "Chat about this", and only until the follow-up pick lands.
 **Self-review (`MODE: self-review`):** there is nothing to post, so this is a
 report, not a gate. Deliver the same ranked findings, the drafted comments
 (as your own notes), and the verdict directly to the user. Do not ask whether
-to post, and do not post — go straight to step 6 to clean up.
+to post, and do not post.
+
+**Then write that same report to `/tmp/prr-findings-<N>.md`, every time,
+before you move on to step 6.** A self-review's only output is chat text, and
+chat text is exactly what scrolls away. These findings are about the user's
+own unmerged branch, so they are a worklist to edit against rather than a
+verdict to read once — the file is what stays open in the other pane while
+they fix things.
+
+Write the whole report, not a digest: the ranked findings with their
+`file:line` citations, the drafted comments as notes, the concurred and
+cleared lists, and the verdict. Open it with a short header naming the PR
+URL, the head sha you reviewed, the mode, and whether the pass was
+dual-source or single-source (and if single, why) — a file outlives the
+session that explains it. Same plain-ASCII writing rules as step 4.
+
+The `prr-` prefix is load-bearing. Step 6's cleanup globs `/tmp/pr-<N>-*` and
+deletes everything it matches, so a findings file named into that pattern is
+removed seconds after it is written. Do not "tidy" the name to match the
+other artifacts; it is spelled this way for the same reason
+`/tmp/prr-fanout-<N>.result` is.
+
+Go to step 6 to clean up, and give the user the path.
 
 ## 6. Post and clean up (only after approval)
 
@@ -742,7 +764,10 @@ the PR:
 ```
 
 Report the script's `cleanup verified:` line as the confirmation, same as
-above — no separate check.
+above — no separate check. That line deliberately says nothing about the
+step 5 findings file: it sits outside the `/tmp/pr-<N>-*` glob precisely so it
+outlives the run. Give the user the cleanup line and the findings path
+together.
 
 ### Optional: progress signals on a chat post
 

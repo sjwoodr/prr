@@ -420,6 +420,15 @@ back to the PR. (GitHub does not let you approve your own PR anyway, and the
 point is a fresh zero-knowledge read of your own work.) Self-review takes
 precedence over re-review.
 
+A self-review also writes the full report to **`/tmp/prr-findings-<PR>.md`**,
+with a header naming the PR, the head sha reviewed, and whether the pass was
+dual-source. Findings on your own unmerged branch are a worklist rather than
+something you read once, so they should not live only in chat scrollback where
+they scroll away mid-fix. The file survives the end-of-run cleanup on purpose:
+cleanup removes `/tmp/pr-<PR>-*`, and this is `prr-`-prefixed, the same trick
+`/tmp/prr-fanout-<PR>.result` uses. Nothing ever deletes it for you, so clear
+out old ones yourself if they pile up.
+
 ## Silent (stealth) mode
 
 ```
