@@ -349,6 +349,12 @@ time; the two passes must overlap.
 - **Source A** — your own primary review of the diff: correctness,
   project conventions, test coverage, and the obvious security surface.
   Do this while Source B runs in the background.
+  - **Comment volume is a finding.** Flag a comment block that clearly
+    outweighs the code it describes, and one explaining a REMOVAL, where
+    the deletion is already self-describing. Comments should carry the WHY
+    that is not visible in the code; history lives in the commit message
+    and PR body. Match the repo's convention, but its shortest reasonable
+    form. Rank it a nit, unless the prose also asserts something stale.
 
 Collect Source B's result once it completes.
 
