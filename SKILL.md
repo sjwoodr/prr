@@ -358,6 +358,47 @@ time; the two passes must overlap.
 
 Collect Source B's result once it completes.
 
+### Skip Source B for plain-prose docs changes
+
+Decide this from the changed-file list in step 1, before spawning anything.
+A security pass over a README typo or a changelog entry has nothing to find,
+and the gate would still wait on it. **Skip Source B when EVERY changed file is
+plain prose**, meaning a `.md`, `.rst`, `.adoc` or `.txt` file (or an
+extensionless `LICENSE` / `CHANGELOG` / `AUTHORS`-style file) that is none of
+these:
+
+- **Instructions for an agent.** `CLAUDE.md`, `AGENTS.md`, `SKILL.md`,
+  `copilot-instructions.md`, and anything under `.claude/`, `.cursor/` or
+  `.github/`. These steer tools that act on the repo, so an edit to them is a
+  change in behaviour, not in prose.
+- **Instructions for a person to execute.** Runbooks, playbooks, incident or
+  on-call docs, and any file whose change adds or edits a fenced block of
+  shell, SQL or infrastructure code meant to be run. A wrong command in a
+  runbook does its damage in the middle of an incident, which is exactly when
+  nobody re-checks it.
+- **Claims about how the live system behaves.** ADRs and other decision
+  records, and docs about security, access, permissions, tenancy or data
+  handling. These are true or false against the code, and checking that is
+  Source B's job.
+
+Anything else is not plain prose: code, config, `.yml` / `.json`, lockfiles,
+templates, and `.mdx` (it embeds components that execute). One such file in
+the change means Source B runs. **When unsure, run it**: a wasted pass costs
+minutes, while a skipped one that should have run costs the review's
+credibility.
+
+When skipping:
+
+- Do not spawn Source B and do not start its clock. Say so once in your console
+  output as you start Source A, naming the rule: "Source B skipped: every
+  changed file is plain prose."
+- Step 5's precondition is then met by the skip itself. Nothing is waiting.
+- The gate report carries the one line step 5 asks for whenever the review is
+  single-source, worded as a deliberate skip rather than a failure, so the user
+  can ask for the second pass before answering. A self-review's findings file
+  header says the same.
+- If the user asks for a full or dual-source review, run Source B regardless.
+
 ### The gate WAITS for Source B
 
 **Do not present the step 5 gate until Source B has either returned or
@@ -567,9 +608,10 @@ not a precondition for it.
 
 ## 5. Approval gate — STOP HERE
 
-**Precondition: Source B has returned, or has failed per step 2.** Do not
-open this gate on a Source-A-only set of findings while the agent is still
-running. See "The gate WAITS for Source B" in step 2.
+**Precondition: Source B has returned, has failed, or was skipped as a
+plain-prose docs change per step 2.** Do not open this gate on a
+Source-A-only set of findings while the agent is still running. See "The gate
+WAITS for Source B" in step 2.
 
 Show the user:
 - The ranked findings.
@@ -577,8 +619,8 @@ Show the user:
 - The concurred list from step 3, if any, so it is clear which findings are
   going into the summary body instead of getting an inline comment.
 - The proposed verdict.
-- If Source B failed, one line saying so, so the user knows the review is
-  single-source before they answer.
+- If Source B failed or was skipped, one line saying which, so the user knows
+  the review is single-source before they answer.
 
 Then ask with the **`AskUserQuestion` tool** — not a plain-text list, so the
 options are clickable instead of something the user has to type. The
