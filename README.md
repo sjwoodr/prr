@@ -556,27 +556,18 @@ scrolled away: `prr: reviewing #<PR>` for a full pass, `prr: re-reviewing #<PR>`
 for an incremental one, and `prr: self-reviewing #<PR>` for your own PR (which
 posts nothing back). It is keyed per
 session, so parallel fan-out panes each show their own PR. When idle it prints
-`~/path (branch) <ctx> [<model>]` instead — the directory, git branch, current
-context size against the window, and the model, e.g.
-`~/src/platform (main) 270k/1M [Opus 5]`. The model comes from the
-status blob's `display_name`, falling back to the raw model id. The context
-figure is real input-token occupancy: it includes the system prompt, tool
-definitions, and injected context (CLAUDE.md, rules, memory) plus history, not
-just conversation text. Both forms are capped at 70 characters by default
-(override with the `PRR_STATUSLINE_WIDTH` env var, set the same way as
-`PRR_FANOUT`), trimmed with a trailing `...`; the context count and the model
-are kept out of that trim so they stay visible. Adding the model costs about
-nine characters of the cap, so on a deep path with a long branch name you may
-want to raise `PRR_STATUSLINE_WIDTH`.
+`~/path (branch) [<model>]` instead, e.g. `~/src/platform (main) [Opus 5]`. The
+model comes from the status blob's `display_name` with any trailing
+parenthetical dropped (`Opus 5 (1M context)` shows as `Opus 5`), falling back to
+the raw model id. There is no context-size figure, because Claude Code already
+shows a token count above the prompt.
 
-Both the usage and the window size come straight from Claude Code's own
-`context_window` block on the status-line stdin (`total_input_tokens` and
-`context_window_size`), so the denominator is always correct with no
-configuration. Older Claude Code builds that predate `context_window` fall back
-to summing the transcript's latest main-thread usage and inferring the window
-(a `1m` model marker, the `exceeds_200k_tokens` flag, or a >=200k measurement,
-else 200k). On that fallback path only, `PRR_STATUSLINE_CONTEXT_MAX` (accepts
-`1M`, `1000000`, or `200k`) can force the denominator.
+Both forms are capped at 90 characters by default (override with the
+`PRR_STATUSLINE_WIDTH` env var, set the same way as `PRR_FANOUT`). A long path is
+trimmed from the left with a leading `...`, so its deep end (a worktree or
+project name), the branch and the model stay visible; if the branch and model
+alone fill the cap, only they are shown. The review line is trimmed with a
+trailing `...`.
 
 Enable it by pointing a `statusLine` command at the bundled script in
 `~/.claude/settings.json`:
