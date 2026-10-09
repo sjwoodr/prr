@@ -230,7 +230,9 @@ three checks:
   exits, relay its rollup to the user. A pane closes as soon as its review
   ends, so for any PR whose rollup line has a `findings:` path (a self-review's
   report), read that file and give the user its verdict and ranked findings
-  here, with the path, since the pane that showed them is gone.
+  here, with the path, since the pane that showed them is gone. Likewise give
+  the user each `slack (post by hand):` message verbatim, so they can post it
+  (see "Optional: progress signals on a chat post").
 
 - **Otherwise** (opted out with `PRR_FANOUT=off`, no GUI, or no backend
   resolvable — e.g. unset with no `tmux` on `PATH`) — fall back to reviewing the
@@ -291,7 +293,23 @@ Then:
   - **Jira ticket:** use the Atlassian MCP `getJiraIssue` tool if
     available. **Actually call it.** MCP tools are often deferred: listed
     by name only until loaded, so load it first (in Claude Code,
-    `ToolSearch` with `select:mcp__atlassian__getJiraIssue`). A tool you
+    `ToolSearch` with the query `+atlassian getJiraIssue`). Search rather
+    than `select:` one exact name: the prefix depends on how the server was
+    connected - `mcp__atlassian__getJiraIssue` for the standalone Atlassian
+    MCP, `mcp__claude_ai_Atlassian_Rovo__getJiraIssue` for the Atlassian
+    Rovo connector on claude.ai - and a `select:` with the wrong prefix
+    finds nothing. Keep the `+atlassian`: it requires the vendor in the
+    tool name, so a `getJiraIssue` on some other connected server is never
+    sent the ticket key and site URL. Either way the tool requires `cloudId`: the ticket's site URL
+    (`https://<site>.atlassian.net`) is accepted as-is; for a bare
+    `KEY-NNNN`, take it from the same server's
+    `getAccessibleAtlassianResources`. Its default fields
+    leave out custom fields, which is where many projects keep acceptance
+    criteria, so pass `fields: ["*all"]` with `expand: "names"` to read
+    them by name. The ticket is read only to check acceptance criteria:
+    never quote its other fields (internal notes, customer details) in the
+    review body, inline comments or `slack_summary`, since prr can post on
+    a public repo. A tool you
     have not tried to load is not missing. Not hypothetical: an unattended
     run in a session where Jira worked earlier that day recorded "unread"
     for two reviews without ever making the call. Only if no Atlassian MCP
@@ -849,7 +867,8 @@ containing:
   writing rules as step 4 (no em-dashes, no curly quotes, never the word
   "footgun"). The field is stripped from the body before the review is
   posted to GitHub; it only feeds Slack. If the chat integration is not
-  configured it is silently ignored, so it is safe to always include.
+  configured, the post script prints it for the user to post by hand
+  instead, so it is still worth writing well.
 
   **Address the author in the second person.** The reply lands in the thread
   under the author's own PR post, so you are talking *to* them, not *about*
@@ -891,7 +910,9 @@ cleanup verified: worktree gone, no /tmp/pr-<N>-* artifacts left
 ```
 
 or, if something survived, `cleanup INCOMPLETE, still present: <paths>`. That
-line IS the confirmation; quote it and move on. Do not follow up with an
+line IS the confirmation; quote it and move on. If the output above it has a
+`slack: reply not posted` line, end your reply with the message under it,
+verbatim, so the user can post it in the PR's chat thread themselves. Do not follow up with an
 `ls /tmp/pr-<N>-*` or `git worktree list | grep <N>` of your own. Such a
 command embeds the PR number in a pipeline, so it can never match the
 permission allow-list and forces an approval prompt on every review, to
@@ -949,7 +970,12 @@ opt-in and a no-op unless both environment variables are set:
   need for workspace-admin approval of the app install.
 - `PRR_CODE_REVIEWS_CHANNEL` — the channel ID to search (e.g. `C0XXXXXXX`).
 
-With neither set, prr behaves exactly as before. Reactions post as you;
+With either one unset, nothing reaches Slack. Whenever the thread reply is not
+posted (Slack not configured, the PR's post not found, or a Slack error), a
+review that posts still prints its `slack_summary` under a
+`slack: reply not posted` line (in a fan-out pane it also writes
+`/tmp/prr-slack-<N>.txt` for the rollup), and you hand it to the user at the end
+of the run (step 6). Silent reviews print nothing. Reactions post as you;
 multiple reactions are fine (one per reviewer), and re-reacting (or re-removing)
 the same post is a harmless no-op. Every step is best-effort: if the post is not
 found or Slack errors, it logs a note and does not fail the run (the review is

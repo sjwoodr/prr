@@ -29,7 +29,9 @@ are set:
 
 Nothing is hard-coded; with neither var set the skill behaves exactly as before.
 Best-effort by design: any failure (missing config, post not found, Slack error)
-prints a note and exits 0 so it never aborts the review that was already posted.
+prints a note and never aborts the review that was already posted. It exits 0,
+except that a --reply which was not posted (for any of those reasons) exits
+NOT_POSTED, so the caller can hand the text to the user instead.
 
 Usage:
   slack_react.py --repo owner/name --number 754 --react eyes
@@ -110,8 +112,14 @@ def _do_reply(token, channel, ts, text):
              {"channel": channel, "thread_ts": ts, "text": text}, post=True)
     if r.get("ok"):
         print(f"slack: posted a thread reply to the PR's chat post (ts {ts})")
-    else:
-        print(f"slack: thread reply failed ({r.get('error')}); reply manually if needed")
+        return True
+    print(f"slack: thread reply failed ({r.get('error')})")
+    return False
+
+
+# Exit code for "a --reply was asked for and not posted". Distinct from 1 so a
+# caller can tell it from a crash, though post-review.sh treats both the same.
+NOT_POSTED = 3
 
 
 def main():
@@ -131,22 +139,22 @@ def main():
     token = os.environ.get("SLACK_BOT_TOKEN")
     if not token or not args.channel:
         # Opt-in feature: silently do nothing unless both token and channel are set.
-        return 0
+        return NOT_POSTED if args.reply else 0
     if not (react or args.unreact or args.reply):
         return 0  # nothing asked of us
 
     ts, err = _find_post_ts(token, args.channel, args.repo, args.number)
     if not ts:
         print(f"slack: PR chat post not found ({err}); skipping reactions/reply")
-        return 0
+        return NOT_POSTED if args.reply else 0
 
     # Order matters: clear the in-progress marker, set the outcome, then reply.
     if args.unreact:
         _do_unreact(token, args.channel, ts, args.unreact)
     if react:
         _do_react(token, args.channel, ts, react)
-    if args.reply:
-        _do_reply(token, args.channel, ts, args.reply)
+    if args.reply and not _do_reply(token, args.channel, ts, args.reply):
+        return NOT_POSTED
     return 0
 
 

@@ -398,10 +398,25 @@ else
     APPROVE) react_emoji="white_check_mark" ;;
     *)       react_emoji="speech_balloon" ;;
   esac
+  slack_rc=0
   python3 "$script_dir/slack_react.py" \
     --repo "$repo" --number "$number" \
     --unreact eyes --react "$react_emoji" \
-    ${slack_summary:+--reply "$slack_summary"} || true
+    ${slack_summary:+--reply "$slack_summary"} || slack_rc=$?
+  # A nonzero exit means the reply was not posted (Slack not configured, post
+  # not found, Slack error, or the helper crashed), so hand the message to the
+  # user to post by hand. A fan-out pane closes as soon as this script ends, so
+  # there it also goes to a file for the rollup; the prr- prefix keeps it out of
+  # cleanup's /tmp/pr-<n>-* glob, like the findings file. Best-effort: a failed
+  # write must not stop cleanup or the fan-out result below.
+  if [[ -n "$slack_summary" ]] && ((slack_rc)); then
+    echo "slack: reply not posted, post this in the PR's chat thread yourself:"
+    echo "  $slack_summary"
+    if [[ -n "${PRR_FANOUT_PANE:-}" ]]; then
+      { printf '%s\n' "$slack_summary" > "/tmp/prr-slack-${number}.txt"; } 2>/dev/null \
+        || echo "slack: could not write /tmp/prr-slack-${number}.txt" >&2
+    fi
+  fi
 fi
 
 cleanup

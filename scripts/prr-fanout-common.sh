@@ -82,6 +82,8 @@ print_rollup() {
     fi
     f="/tmp/prr-findings-$n.md"
     if [[ -f "$f" && "$f" -nt "$fanout_stamp" ]]; then echo "        findings: $f"; fi
+    f="/tmp/prr-slack-$n.txt"
+    if [[ -f "$f" && "$f" -nt "$fanout_stamp" ]]; then echo "        slack (post by hand): $(<"$f")"; fi
   done
   rm -f "$fanout_stamp"
 }

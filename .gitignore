@@ -4,3 +4,6 @@ Thumbs.db
 
 # Distributable bundle — built from this directory, never committed.
 *.zip
+
+# Python bytecode, written when a script runs.
+__pycache__/
