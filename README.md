@@ -228,7 +228,7 @@ says so, naming which of the three happened, since "died", "stubbed twice" and
 is worth re-running later.
 
 - `PRR_SOURCE_B_TIMEOUT` — how long the gate waits for the security agent, in
-  seconds; default `600` (10 minutes); `0` = wait indefinitely. A non-numeric
+  seconds; default `900` (15 minutes); `0` = wait indefinitely. A non-numeric
   or negative value logs a notice and falls back to the default rather than
   silently disabling the wait, since a typo that reads as an expired budget
   would quietly make every review single-source.

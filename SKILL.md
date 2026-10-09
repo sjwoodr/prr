@@ -510,7 +510,7 @@ It prints one line and always exits 0:
   It deliberately does not read as an expired budget, because that would
   silently turn every review single-source.
 
-The budget defaults to 600 seconds and is set by `PRR_SOURCE_B_TIMEOUT` (see
+The budget defaults to 900 seconds and is set by `PRR_SOURCE_B_TIMEOUT` (see
 the README). Do not implement the timeout yourself with date arithmetic, and
 do not substitute a `sleep`: the clock script is the one place the default,
 the override and the malformed-value fallback are handled.
@@ -528,7 +528,7 @@ outcome, not a hypothetical:
 After a failed resume, a death, or a `VERDICT=timeout`, proceed single-source.
 Say so plainly in your report to the user, and say which of the three it was:
 "the agent died", "the agent stubbed twice" and "the agent was still running
-at the 10-minute cap" mean different things about whether the missing pass is
+at the 15-minute cap" mean different things about whether the missing pass is
 worth re-running later. Either way the review came from one pass, and the user
 should know that before they answer the gate.
 

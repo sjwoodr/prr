@@ -28,10 +28,10 @@
 # `check` prints one line of KEY=VALUE pairs on stdout, always exit 0 so a
 # caller under `set -e` is never killed by a verdict:
 #
-#   VERDICT=wait     ELAPSED=123 BUDGET=600 REMAINING=477
-#   VERDICT=timeout  ELAPSED=612 BUDGET=600 REMAINING=0
+#   VERDICT=wait     ELAPSED=123 BUDGET=900 REMAINING=777
+#   VERDICT=timeout  ELAPSED=912 BUDGET=900 REMAINING=0
 #   VERDICT=nocap    ELAPSED=123 BUDGET=0
-#   VERDICT=nostamp  ELAPSED=0   BUDGET=600 REMAINING=600
+#   VERDICT=nostamp  ELAPSED=0   BUDGET=900 REMAINING=900
 #
 # nostamp means `start` was never run for this PR. It reports `nostamp` rather
 # than `timeout` on purpose: a missing stamp is a skill bug, and resolving it
@@ -40,7 +40,7 @@
 # the exact outcome the gate rule exists to prevent.
 #
 # Config (env):
-#   PRR_SOURCE_B_TIMEOUT  budget in seconds; default 600 (10 min); 0 = no cap.
+#   PRR_SOURCE_B_TIMEOUT  budget in seconds; default 900 (15 min); 0 = no cap.
 #                         Anything non-numeric or negative falls back to the
 #                         default with a notice on stderr -- a typo must not
 #                         silently disable the wait.
@@ -50,7 +50,7 @@
 set -euo pipefail
 TAG="source-b-clock"
 
-DEFAULT_BUDGET=600
+DEFAULT_BUDGET=900
 
 usage() {
   echo "$TAG: usage: $(basename "$0") start|check|a-done|b-done <pr-number>" >&2
