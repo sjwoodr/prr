@@ -157,9 +157,28 @@ fmt_k() { # 1500000->1.5M, 226000->226k, 3100->3.1k, 500->500
   else printf '%d' "$1"; fi
 }
 
+# The review line ("prr: reviewing #1861 - [IBX-3763] Title") is trimmed as
+# plain text first, like the idle line, then coloured in parts: "prr: <verb>",
+# the PR number, a leading ticket key in the title; the title itself stays the
+# terminal's default colour. A line that does not have that shape (an older
+# setup-review.sh, a hand-written file) is printed plain.
+review_line() {
+  local plain re
+  plain="$(emit "$1")"
+  re='^(prr: [a-z-]+) (#[0-9]+)( - )?(\[[A-Z][A-Z0-9]*-[0-9]+\])?(.*)$'
+  if [[ "$plain" =~ $re ]]; then
+    local out
+    out="$(paint "${PRR_STATUSLINE_REVIEW_COLOR:-179}" "${BASH_REMATCH[1]}") $(paint "${PRR_STATUSLINE_PR_COLOR:-114}" "${BASH_REMATCH[2]}")${BASH_REMATCH[3]}"
+    [ -n "${BASH_REMATCH[4]}" ] && out="$out$(paint "${PRR_STATUSLINE_TICKET_COLOR:-73}" "${BASH_REMATCH[4]}")"
+    printf '%s' "$out${BASH_REMATCH[5]}"
+  else
+    printf '%s' "$plain"
+  fi
+}
+
 state="/tmp/prr-status-${sid:-nosession}"
 if [ -f "$state" ]; then
-  emit "$(cat "$state")"
+  review_line "$(cat "$state")"
   timings_line
   exit 0
 fi

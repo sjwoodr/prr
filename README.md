@@ -671,7 +671,8 @@ so it stays fast on very long sessions. It needs `jq`; without it, or on any
 error, the line is simply left off. It is on by default; set
 `PRR_STATUSLINE_TIMINGS=0` to turn it off.
 
-Each part has its own colour, set by an environment variable:
+Each part has its own colour, set by an environment variable (the review
+line's title keeps your terminal's normal colour):
 
 | Part | Variable | Default |
 |---|---|---|
@@ -680,6 +681,9 @@ Each part has its own colour, set by an environment variable:
 | model | `PRR_STATUSLINE_MODEL_COLOR` | `176` (orchid) |
 | context size | `PRR_STATUSLINE_CONTEXT_COLOR` | `179` (gold) |
 | timings line | `PRR_STATUSLINE_TIMINGS_COLOR` | `75` (light blue) |
+| review line: `prr: <verb>` | `PRR_STATUSLINE_REVIEW_COLOR` | `179` (gold) |
+| review line: PR number | `PRR_STATUSLINE_PR_COLOR` | `114` (green) |
+| review line: ticket key in the title | `PRR_STATUSLINE_TICKET_COLOR` | `73` (teal) |
 
 Each takes a name (`blue`, `cyan`, `green`, `yellow`, `magenta`, `red`, `white`,
 `grey`, or `brightblue` and the other `bright...` names), a 256-colour number
