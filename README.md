@@ -654,6 +654,23 @@ project name), the branch and the model stay visible; if the branch and model
 alone fill the cap, only they are shown. The review line is trimmed with a
 trailing `...`.
 
+Under either form, a second line shows how the last turn went:
+
+```text
+⏱ last turn 47.2s · 8 calls · out 3.1k · new in 12k · cache hit 98%
+```
+
+It is read from the session transcript Claude Code names in the status blob, so
+it needs no hooks. A turn runs from the last prompt you typed to the last reply;
+while one is still running (the transcript ends on a tool call or its result) it
+reads `so far` instead of `last turn`. `calls` counts the model requests in the
+turn, `out` its output tokens, `new in` the input that was not served from the
+prompt cache, and `cache hit` the share that was: a low hit rate on a long
+session means it is rereading its context. Only the transcript's tail is read,
+so it stays fast on very long sessions. It needs `jq`; without it, or on any
+error, the line is simply left off. It is on by default; set
+`PRR_STATUSLINE_TIMINGS=0` to turn it off.
+
 Enable it by pointing a `statusLine` command at the bundled script in
 `~/.claude/settings.json`:
 

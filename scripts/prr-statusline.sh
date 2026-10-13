@@ -52,9 +52,85 @@ if [ -z "${sid:-}" ]; then
   sid="$(printf '%s' "$in" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
 fi
 
+# Second line: how the last turn went. On by default; PRR_STATUSLINE_TIMINGS=0
+# (or false/no/off) turns it off.
+#   ⏱ last turn 47.2s · 8 calls · out 3.1k · new in 12k · cache hit 98%
+# Read from the session transcript Claude Code names on stdin, so no hooks are
+# needed. A turn runs from the last prompt you typed to the last reply; while it
+# is still going (the last entry is a tool call or its result) it reads
+# "so far". Calls are distinct assistant messages; "new in" is input that was
+# not read from the prompt cache (uncached + cache writes), summed over the
+# turn; "cache hit" is cached input over all input. Only the transcript's tail
+# is read (transcripts reach hundreds of MB), read as raw lines (-R) so the cut
+# first line is skipped by fromjson?, and any failure prints nothing rather
+# than disturbing the main line. Needs jq.
+timings_line() {
+  case "${PRR_STATUSLINE_TIMINGS:-1}" in 0|false|no|off) return 0 ;; esac
+  command -v jq >/dev/null 2>&1 || return 0
+  local tp
+  tp="$(printf '%s' "$in" | jq -r '.transcript_path // empty' 2>/dev/null)"
+  [ -n "${tp:-}" ] && [ -f "$tp" ] || return 0
+  local stats
+  stats="$(tail -c 4000000 "$tp" 2>/dev/null | tail -n +2 | jq -R -n -r '
+    def secs: (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)
+      + ((capture("\\.(?<f>[0-9]+)Z$").f // "0") | "0." + . | tonumber);
+    def text_of: if (.message.content | type) == "string" then .message.content
+      else ([.message.content[]? | select(.type == "text") | .text] | first // null) end;
+    # A prompt you typed: Claude Code marks it origin.kind "human". Older
+    # transcripts lack that, so fall back to user text that is neither a tool
+    # result nor system-injected (those start with "<").
+    def is_prompt: .type == "user" and (.isMeta != true)
+      and (if .origin.kind? then .origin.kind == "human"
+           else ([.message.content[]? | select(type == "object" and .type == "tool_result")] | length) == 0
+             and (text_of | type) == "string" and ((text_of | ltrimstr(" ") | startswith("<")) | not)
+           end);
+    [inputs | fromjson? | select(.isSidechain != true and (.type == "user" or .type == "assistant"))] as $e
+    | ($e | map(is_prompt) | indices(true) | last) as $start
+    | if $start == null then empty else
+        $e[$start:] as $turn
+        | ($turn | map(select(.type == "assistant" and .message.usage != null))
+                 | group_by(.message.id) | map(last)) as $calls
+        | ($turn | last) as $end
+        | ($end.type == "user"
+           or ([$end.message.content[]? | select(type == "object" and .type == "tool_use")] | length) > 0) as $running
+        | ((if $running then now else ($end.timestamp | secs) end) - ($turn[0].timestamp | secs)) as $dur
+        | [$calls[].message.usage] as $u
+        | [ ($dur * 10 | round / 10), (if $running then 1 else 0 end), ($calls | length),
+            ([$u[].output_tokens // 0] | add // 0),
+            ([$u[] | (.input_tokens // 0) + (.cache_creation_input_tokens // 0)] | add // 0),
+            ([$u[].cache_read_input_tokens // 0] | add // 0) ] | @tsv
+      end' 2>/dev/null)" || return 0
+  [ -n "$stats" ] || return 0
+  local dur running calls out new cached
+  IFS="$(printf '\t')" read -r dur running calls out new cached <<EOF
+$stats
+EOF
+  case "$calls$out$new$cached" in *[!0-9]*) return 0 ;; esac
+  local label="last turn"
+  [ "$running" = 1 ] && label="so far"
+  local t="⏱ $label ${dur}s"
+  [ "$calls" -gt 0 ] && t="$t · $calls call$([ "$calls" = 1 ] || printf s)"
+  [ "$out" -gt 0 ] && t="$t · out $(fmt_k "$out")"
+  [ "$new" -gt 0 ] && t="$t · new in $(fmt_k "$new")"
+  if [ $((new + cached)) -gt 0 ] && [ "$cached" -gt 0 ]; then
+    t="$t · cache hit $((cached * 100 / (new + cached)))%"
+  fi
+  printf '\n%s' "$t"
+}
+
+fmt_k() { # 1500000->1.5M, 226000->226k, 3100->3.1k, 500->500
+  if [ "$1" -ge 1000000 ]; then
+    if [ $(($1 % 1000000)) -eq 0 ]; then printf '%dM' "$(($1 / 1000000))"
+    else printf '%d.%dM' "$(($1 / 1000000))" "$((($1 % 1000000) / 100000))"; fi
+  elif [ "$1" -ge 10000 ]; then printf '%dk' "$(($1 / 1000))"
+  elif [ "$1" -ge 1000 ]; then printf '%d.%dk' "$(($1 / 1000))" "$((($1 % 1000) / 100))"
+  else printf '%d' "$1"; fi
+}
+
 state="/tmp/prr-status-${sid:-nosession}"
 if [ -f "$state" ]; then
   emit "$(cat "$state")"
+  timings_line
   exit 0
 fi
 
@@ -87,13 +163,6 @@ line="$(emit_left "$dir" "$suffix")"
 # Context size vs the window, e.g. "123k/1M", from Claude Code's context_window
 # block. Appended only when it fits whole, so it is dropped before the path is
 # trimmed. Claude Code shows its own count above the prompt in some layouts only.
-fmt_k() { # 1500000->1.5M, 226000->226k, 500->500
-  if [ "$1" -ge 1000000 ]; then
-    if [ $(($1 % 1000000)) -eq 0 ]; then printf '%dM' "$(($1 / 1000000))"
-    else printf '%d.%dM' "$(($1 / 1000000))" "$((($1 % 1000000) / 100000))"; fi
-  elif [ "$1" -ge 1000 ]; then printf '%dk' "$(($1 / 1000))"
-  else printf '%d' "$1"; fi
-}
 ctoks="$(printf '%s' "$in" | jq -r '.context_window.total_input_tokens // empty' 2>/dev/null)"
 csize="$(printf '%s' "$in" | jq -r '.context_window.context_window_size // empty' 2>/dev/null)"
 case "${ctoks:-x}" in *[!0-9]*|x) ctoks="" ;; esac
@@ -104,3 +173,4 @@ if [ -n "$ctoks" ] && [ -n "$csize" ]; then
 fi
 
 printf '%s' "$line"
+timings_line
