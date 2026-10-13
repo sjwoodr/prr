@@ -63,7 +63,8 @@ fi
 # turn; "cache hit" is cached input over all input. Only the transcript's tail
 # is read (transcripts reach hundreds of MB), read as raw lines (-R) so the cut
 # first line is skipped by fromjson?, and any failure prints nothing rather
-# than disturbing the main line. Needs jq.
+# than disturbing the main line. Needs jq. Coloured light blue by default;
+# PRR_STATUSLINE_TIMINGS_COLOR picks another (see timings_color).
 timings_line() {
   case "${PRR_STATUSLINE_TIMINGS:-1}" in 0|false|no|off) return 0 ;; esac
   command -v jq >/dev/null 2>&1 || return 0
@@ -115,7 +116,33 @@ EOF
   if [ $((new + cached)) -gt 0 ] && [ "$cached" -gt 0 ]; then
     t="$t · cache hit $((cached * 100 / (new + cached)))%"
   fi
-  printf '\n%s' "$t"
+  local sgr
+  sgr="$(timings_color "${PRR_STATUSLINE_TIMINGS_COLOR:-75}")"
+  if [ -n "$sgr" ]; then
+    printf '\n\033[%sm%s\033[0m' "$sgr" "$t"
+  else
+    printf '\n%s' "$t"
+  fi
+}
+
+# PRR_STATUSLINE_TIMINGS_COLOR to an ANSI SGR code: a name (blue, brightblue,
+# grey, ...), a 256-colour number (0-255), a hex #rrggbb for true-colour
+# terminals, or none. Anything unrecognised means no colour rather than garbage.
+timings_color() {
+  local c
+  c="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$c" in
+    ''|none|off) return 0 ;;
+    black) echo 30 ;; red) echo 31 ;; green) echo 32 ;; yellow) echo 33 ;;
+    blue) echo 34 ;; magenta) echo 35 ;; cyan) echo 36 ;; white) echo 37 ;;
+    grey|gray) echo 90 ;;
+    brightred) echo 91 ;; brightgreen) echo 92 ;; brightyellow) echo 93 ;;
+    brightblue) echo 94 ;; brightmagenta) echo 95 ;; brightcyan) echo 96 ;; brightwhite) echo 97 ;;
+    \#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+      printf '38;2;%d;%d;%d\n' "0x${c:1:2}" "0x${c:3:2}" "0x${c:5:2}" ;;
+    *[!0-9]*) return 0 ;;
+    *) [ "$c" -le 255 ] && echo "38;5;$c" ;;
+  esac
 }
 
 fmt_k() { # 1500000->1.5M, 226000->226k, 3100->3.1k, 500->500
