@@ -671,12 +671,22 @@ so it stays fast on very long sessions. It needs `jq`; without it, or on any
 error, the line is simply left off. It is on by default; set
 `PRR_STATUSLINE_TIMINGS=0` to turn it off.
 
-The line is light blue by default (256-colour 75). Set
-`PRR_STATUSLINE_TIMINGS_COLOR` to change it: a name (`blue`, `cyan`, `green`,
-`yellow`, `magenta`, `red`, `white`, `grey`, or `brightblue` and the other
-`bright...` names), a 256-colour number (`0`-`255`), a hex `#rrggbb` on
-true-colour terminals, or `none` for no colour. Anything else falls back to no
-colour.
+Each part has its own colour, set by an environment variable:
+
+| Part | Variable | Default |
+|---|---|---|
+| working directory | `PRR_STATUSLINE_DIR_COLOR` | `73` (teal) |
+| branch | `PRR_STATUSLINE_BRANCH_COLOR` | `114` (green) |
+| model | `PRR_STATUSLINE_MODEL_COLOR` | `176` (orchid) |
+| context size | `PRR_STATUSLINE_CONTEXT_COLOR` | `179` (gold) |
+| timings line | `PRR_STATUSLINE_TIMINGS_COLOR` | `75` (light blue) |
+
+Each takes a name (`blue`, `cyan`, `green`, `yellow`, `magenta`, `red`, `white`,
+`grey`, or `brightblue` and the other `bright...` names), a 256-colour number
+(`0`-`255`), a hex `#rrggbb` on true-colour terminals, or `none` for no colour.
+Anything else falls back to no colour. Setting `NO_COLOR` (the common
+convention) turns all of them off. Colours do not count against the width cap:
+the line is trimmed as plain text first.
 
 Enable it by pointing a `statusLine` command at the bundled script in
 `~/.claude/settings.json`:

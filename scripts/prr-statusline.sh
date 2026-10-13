@@ -64,7 +64,7 @@ fi
 # is read (transcripts reach hundreds of MB), read as raw lines (-R) so the cut
 # first line is skipped by fromjson?, and any failure prints nothing rather
 # than disturbing the main line. Needs jq. Coloured light blue by default;
-# PRR_STATUSLINE_TIMINGS_COLOR picks another (see timings_color).
+# PRR_STATUSLINE_TIMINGS_COLOR picks another (see color_code).
 timings_line() {
   case "${PRR_STATUSLINE_TIMINGS:-1}" in 0|false|no|off) return 0 ;; esac
   command -v jq >/dev/null 2>&1 || return 0
@@ -116,19 +116,22 @@ EOF
   if [ $((new + cached)) -gt 0 ] && [ "$cached" -gt 0 ]; then
     t="$t · cache hit $((cached * 100 / (new + cached)))%"
   fi
-  local sgr
-  sgr="$(timings_color "${PRR_STATUSLINE_TIMINGS_COLOR:-75}")"
-  if [ -n "$sgr" ]; then
-    printf '\n\033[%sm%s\033[0m' "$sgr" "$t"
-  else
-    printf '\n%s' "$t"
-  fi
+  printf '\n%s' "$(paint "${PRR_STATUSLINE_TIMINGS_COLOR:-75}" "$t")"
 }
 
-# PRR_STATUSLINE_TIMINGS_COLOR to an ANSI SGR code: a name (blue, brightblue,
-# grey, ...), a 256-colour number (0-255), a hex #rrggbb for true-colour
-# terminals, or none. Anything unrecognised means no colour rather than garbage.
-timings_color() {
+# paint COLOR TEXT: TEXT wrapped in COLOR's escape codes (plain when none).
+paint() {
+  local sgr
+  sgr="$(color_code "$1")"
+  if [ -n "$sgr" ] && [ -n "$2" ]; then printf '\033[%sm%s\033[0m' "$sgr" "$2"; else printf '%s' "$2"; fi
+}
+
+# A colour setting to an ANSI SGR code: a name (blue, brightblue, grey, ...), a
+# 256-colour number (0-255), a hex #rrggbb for true-colour terminals, or none.
+# Anything unrecognised means no colour rather than garbage, and NO_COLOR (the
+# common convention) turns every colour off.
+color_code() {
+  [ -n "${NO_COLOR:-}" ] && return 0
   local c
   c="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
   case "$c" in
@@ -199,5 +202,35 @@ if [ -n "$ctoks" ] && [ -n "$csize" ]; then
   [ $(( ${#line} + ${#tokens} )) -le "$MAX_WIDTH" ] && line="$line$tokens"
 fi
 
-printf '%s' "$line"
+# Colour each part only now: the width cap counts characters, so the line is
+# measured and trimmed as plain text first. What survived the trim is split
+# back into its parts (the suffix is never trimmed, only the path, or the path
+# is dropped entirely when the branch and model alone fill the cap).
+shown="$line"
+ctx_part=""
+if [ -n "${tokens:-}" ] && [ "${shown%"$tokens"}" != "$shown" ]; then
+  shown="${shown%"$tokens"}"
+  ctx_part="$tokens"
+fi
+if [ -z "$suffix" ]; then
+  dir_part="$shown"
+elif [ "${shown%"$suffix"}" != "$shown" ]; then
+  dir_part="${shown%"$suffix"}"
+else
+  dir_part=""  # only the suffix fitted (emit_left printed it without its space)
+fi
+out=""
+[ -n "$dir_part" ] && out="$(paint "${PRR_STATUSLINE_DIR_COLOR:-73}" "$dir_part")"
+if [ -n "${branch:-}" ]; then
+  [ -n "$out" ] && out="$out "
+  out="$out($(paint "${PRR_STATUSLINE_BRANCH_COLOR:-114}" "$branch"))"
+fi
+if [ -n "${model_label:-}" ]; then
+  [ -n "$out" ] && out="$out "
+  out="$out[$(paint "${PRR_STATUSLINE_MODEL_COLOR:-176}" "$model_label")]"
+fi
+[ -n "$ctx_part" ] && out="$out $(paint "${PRR_STATUSLINE_CONTEXT_COLOR:-179}" "${ctx_part# }")"
+[ -n "$out" ] || out="$line"
+
+printf '%s' "$out"
 timings_line
