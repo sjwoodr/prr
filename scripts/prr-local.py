@@ -94,6 +94,31 @@ SKIP_PATHS = re.compile(
     r"|go\.sum|Cargo\.lock|\.terraform\.lock\.hcl|.*\.min\.(js|css)|.*\.snap|.*generated.*)$"
 )
 
+# Ollama's cloud models (`name:cloud`, `name-cloud`) ignore `format`, the
+# schema and plain "json" alike, and answer in prose, often in a ```json fence.
+# They get the schema in the system prompt too, and fences are stripped before
+# parsing. Measured on gpt-oss:120b-cloud and gemma4:31b-cloud, 2026-10-13.
+CLOUD_MODEL = re.compile(r"[-:]cloud$")
+FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
+
+
+def system_for(model, system, schema):
+    if not CLOUD_MODEL.search(model):
+        return system
+    return (f"{system}\n\nReply with only a JSON object matching this schema: "
+            f"{json.dumps(schema)}")
+
+
+def parse_content(text):
+    return json.loads(FENCE.sub("", text.strip()))
+
+
+def fast_think(model):
+    """What "no thinking" means for a model. gpt-oss can't turn reasoning off:
+    with think:false it returns empty content, so it reasons at "low"."""
+    return "low" if model.startswith("gpt-oss") else False
+
+
 FINDINGS_SCHEMA = {
     "type": "object",
     "properties": {
@@ -225,13 +250,13 @@ def ollama_chat(model, system, user, schema, num_ctx, think=False, stats=None,
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": system},
+            {"role": "system", "content": system_for(model, system, schema)},
             {"role": "user", "content": user},
             *(extra or []),
         ],
         "stream": False,
         "format": schema,
-        "think": think,
+        "think": think or fast_think(model),
         # No num_thread: it is a load-time option, so setting it would force a
         # reload against every client that doesn't, and the model runs on the GPU.
         "options": {"temperature": 0.15, "num_ctx": num_ctx},
@@ -247,7 +272,7 @@ def ollama_chat(model, system, user, schema, num_ctx, think=False, stats=None,
                 payload = json.load(resp)
             if stats is not None:
                 stats["thinking_chars"] = len(payload["message"].get("thinking") or "")
-            return json.loads(payload["message"]["content"])
+            return parse_content(payload["message"]["content"])
         except urllib.error.HTTPError as exc:
             if attempt == 1 and body.get("think") is False:
                 body.pop("think")  # older Ollama: unknown field
@@ -287,7 +312,7 @@ def ollama_chat_budgeted(model, system, user, schema, num_ctx, budget, stats):
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": system},
+            {"role": "system", "content": system_for(model, system, schema)},
             {"role": "user", "content": user},
         ],
         "stream": True,
@@ -313,7 +338,7 @@ def ollama_chat_budgeted(model, system, user, schema, num_ctx, budget, stats):
         stats["cut"] = cut
     if not cut:
         try:
-            return json.loads(content)
+            return parse_content(content)
         except json.JSONDecodeError as exc:
             sys.exit(f"ollama returned unparseable content: {exc}")
     answer_now = {
@@ -685,6 +710,13 @@ def selftest():
         raise AssertionError("a streamed error must not be swallowed")
     except RuntimeError:
         pass
+    # Cloud models: the schema goes in the prompt, fences come off; local ones unchanged.
+    assert system_for("gemma4:31b-cloud", "S", {"a": 1}).endswith('schema: {"a": 1}')
+    assert "schema" in system_for("nemotron-3-ultra:cloud", "S", {})
+    assert system_for("gemma4-26b-a4b-32k:latest", "S", {"a": 1}) == "S"
+    assert parse_content('```json\n{"findings": []}\n```') == {"findings": []}
+    assert parse_content(' {"findings": []} ') == {"findings": []}
+    assert fast_think("gpt-oss:120b-cloud") == "low" and fast_think("gemma4:31b-cloud") is False
     # post-review.sh removes every /tmp/pr-<N>-* file; the log must not match.
     import fnmatch
     assert not fnmatch.fnmatch(log_path("7"), "/tmp/pr-7-*"), log_path("7")

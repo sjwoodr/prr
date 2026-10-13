@@ -763,7 +763,11 @@ The model comes from `--model`, else `$PRR_LOCAL_MODEL`. Every call uses one
 context size (`$PRR_LOCAL_NUM_CTX`, default 32768), because Ollama reloads a
 model whenever it changes. `--think` lets the model reason before each file's
 findings. It is uncapped, so prefer `--think-budget N`, which stops the reasoning
-at N tokens and asks for findings from the notes so far. Every review run
+at N tokens and asks for findings from the notes so far. Ollama cloud models
+(`gpt-oss:120b-cloud`, `glm-5.3:cloud`) work through the local Ollama: they
+ignore `format`, so they get the schema in the system prompt as well, and the
+diff leaves the machine, so use one only where that's allowed. gpt-oss can't turn
+reasoning off and runs at `low` without `--think`. Every review run
 logs to `/tmp/prr-local-<N>.log` as it goes (`tail -f` it; cleanup leaves it
 in place). `prr-local/SKILL.md` is for agent harnesses running
 a local model. It sits inside this directory, so Claude Code (which finds only

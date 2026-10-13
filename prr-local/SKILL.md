@@ -47,6 +47,8 @@ thinking. A model without thinking support (Ollama's capabilities, e.g.
 minutes on one file. Add `--silent` to suppress chat signals. Progress goes to
 `/tmp/prr-local-<N>.log`. The default model is
 `gemma4-26b-a4b-32k:latest` (override with `--model` or `$PRR_LOCAL_MODEL`).
+An Ollama cloud model (`gpt-oss:120b-cloud`) also works, but it sends the diff
+off the machine: use one only when the user names it.
 It makes one call per changed file, so time scales with the file count: expect
 seconds to a minute per file, plus ~15 s if the model has to load first. Stream
 the output rather than buffering it, and do not start a second heavy request
