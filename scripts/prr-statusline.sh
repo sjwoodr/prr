@@ -109,7 +109,7 @@ EOF
   case "$calls$out$new$cached" in *[!0-9]*) return 0 ;; esac
   local label="last turn"
   [ "$running" = 1 ] && label="so far"
-  local t="⏱ $label ${dur}s"
+  local t="⏱ $label $(fmt_dur "$dur")"
   [ "$calls" -gt 0 ] && t="$t · $calls call$([ "$calls" = 1 ] || printf s)"
   [ "$out" -gt 0 ] && t="$t · out $(fmt_k "$out")"
   [ "$new" -gt 0 ] && t="$t · new in $(fmt_k "$new")"
@@ -146,6 +146,14 @@ color_code() {
     *[!0-9]*) return 0 ;;
     *) [ "$c" -le 255 ] && echo "38;5;$c" ;;
   esac
+}
+
+fmt_dur() { # 47.2 -> 47.2s, 350.3 -> 5m50s, 3900 -> 1h05m
+  local whole="${1%%.*}"
+  case "$whole" in ''|*[!0-9]*) printf '%ss' "$1"; return ;; esac
+  if [ "$whole" -lt 60 ]; then printf '%ss' "$1"
+  elif [ "$whole" -lt 3600 ]; then printf '%dm%02ds' "$((whole / 60))" "$((whole % 60))"
+  else printf '%dh%02dm' "$((whole / 3600))" "$(((whole % 3600) / 60))"; fi
 }
 
 fmt_k() { # 1500000->1.5M, 226000->226k, 3100->3.1k, 500->500

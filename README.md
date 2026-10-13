@@ -663,7 +663,8 @@ Under either form, a second line shows how the last turn went:
 It is read from the session transcript Claude Code names in the status blob, so
 it needs no hooks. A turn runs from the last prompt you typed to the last reply;
 while one is still running (the transcript ends on a tool call or its result) it
-reads `so far` instead of `last turn`. `calls` counts the model requests in the
+reads `so far` instead of `last turn`. Times show as seconds under a minute,
+then `5m50s`, then `1h05m`. `calls` counts the model requests in the
 turn, `out` its output tokens, `new in` the input that was not served from the
 prompt cache, and `cache hit` the share that was: a low hit rate on a long
 session means it is rereading its context. Only the transcript's tail is read,
