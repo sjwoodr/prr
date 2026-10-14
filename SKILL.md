@@ -654,12 +654,13 @@ Start its clock, then launch it right after Source B, before Source A:
   parallel. It shares more blind spots with you than an outside model does,
   which is the user's trade to make.
 - **Any other model** (`ollama/glm-5.3:cloud`, a local model): run
-  `~/.claude/skills/prr/scripts/source-c.sh --bg <N> <model>`. It runs pi
-  read-only (read, grep, find and ls, no shell and so no network), writes
-  `/tmp/pr-<N>-source-c.md`, and stamps `c-done` only for a real report; an
-  empty or seconds-long run is recorded as a failure, not a return. Missing
-  pi, an unknown model or a refused one: record `failed`, say so at the gate,
-  carry on.
+  `~/.claude/skills/prr/scripts/source-c.sh --bg <N> <model>`. It runs the
+  model read-only in pi, opencode or codex (`PRR_PASS_HARNESS`, else the
+  first installed in that order), writes `/tmp/pr-<N>-source-c.md`, and
+  stamps `c-done` only for a real report; an empty or seconds-long run is
+  recorded as a failure, not a return. No harness, an unknown model or a
+  refused one: record `failed`, say so at the gate, carry on. Name the
+  harness in the Sources line (`C glm-5.3 via pi, 412 s`).
 
 The gate waits for Source C exactly as for Source B, with its own budget:
 `source-b-clock.sh c-check <PR-number>` (`PRR_SOURCE_C_TIMEOUT`, default 900

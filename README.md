@@ -266,10 +266,31 @@ claimed. The gate names the findings only Source C raised, so you can see
 whether it earns its keep. It is never on by default: an outside model costs
 money per review and receives the diff.
 
-- A non-Claude model needs [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
-  and the model in `~/.pi/agent/models.json`. pi gets only read, grep, find
-  and ls (no shell, so no network), a closed stdin and high thinking
-  (`PRR_PASS_THINKING`); a run under 30 seconds (`PRR_PASS_MIN_SECONDS`) or an
+- A non-Claude model runs in an outside agent harness, so it can open files
+  and search the code instead of seeing only the diff: [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent),
+  [opencode](https://opencode.ai) or [codex](https://github.com/openai/codex),
+  in that order of preference. `PRR_PASS_HARNESS=pi|opencode|codex` picks
+  one; unset, the first one installed is used. The model has to be one the
+  harness knows (pi: `~/.pi/agent/models.json`; opencode: a provider in its
+  config; codex: `ollama/<tag>` goes through the local Ollama, anything else
+  to codex's own provider).
+- Every harness runs the model **read-only, with no shell and no network**,
+  from a directory prr creates, never from the PR's worktree:
+  - pi: only the read, grep, find and ls tools.
+  - opencode: a `prr-readonly` agent that denies everything but reading. prr
+    checks that the agent loaded before running and refuses otherwise, and
+    never passes `--auto`.
+  - codex: `-s read-only`, its OS sandbox: any command the model runs can
+    read but not write or reach the network. The PR's `AGENTS.md` is ignored.
+
+  Why not the worktree: opencode and codex read config and instructions from
+  the directory they start in, so a PR could ship an `opencode.json` that
+  gives the "read-only" agent a shell. That was tried against opencode
+  2.0.24 and worked; its environment overrides for config were ignored.
+- Every run gets a closed stdin. Thinking (`PRR_PASS_THINKING`) defaults to
+  `high`, except `off` for a local Ollama model: local Gemma 4 thinking
+  without a budget ran 690 s through pi and returned nothing, and reported
+  in 40 s with it off. A run under 30 seconds (`PRR_PASS_MIN_SECONDS`) or an
   empty report counts as failed, not returned.
 - `PRR_SOURCE_C_TIMEOUT` bounds the wait like `PRR_SOURCE_B_TIMEOUT`.
 - The gate tags every finding with its sources (`[A]`, `[B]`, `[C]`, `[A+C]`)
@@ -948,10 +969,10 @@ prr/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
     ├── source-b-clock.sh # bounds how long the gate waits for Source B (and C)
-    ├── source-b.sh       # Source B through pi, for harnesses with no subagent tool
-    ├── source-c.sh       # opt-in Source C through pi (non-Claude models)
+    ├── source-b.sh       # Source B in an outside harness, for harnesses with no subagent tool
+    ├── source-c.sh       # opt-in Source C in pi, opencode or codex (non-Claude models)
     ├── source-c-brief.md # Source C's brief, shared by the pi and subagent paths
-    ├── pi-pass-common.sh # shared pi runner sourced by source-b.sh and source-c.sh
+    ├── pass-common.sh    # shared read-only runner (pi, opencode, codex) for source-b.sh and source-c.sh
     ├── check-payload.py  # the rules post-review.sh enforces before posting
     ├── prr-statusline.sh # optional: Claude Code status line (opt-in via settings.json)
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)

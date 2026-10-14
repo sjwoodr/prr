@@ -50,6 +50,12 @@ Next:
   path end to end, then one pi run with glm-5.3 when there is credit.
 - Watch what Source C alone found across runs; if it is nothing, say so in
   the README and stop recommending it.
+- Harnesses, 2026-10-14: pi, opencode, codex (PRR_PASS_HARNESS, else first
+  installed). Each tested read-only against a hostile PR (opencode.json
+  granting all, .codex/config.toml asking full access, AGENTS.md with an
+  instruction): read worked, write/shell/network refused or absent. Watch
+  for config-format changes in opencode (2.x moved to `agents` and
+  `permissions` lists); pass_run refuses if the agent did not load.
 - First run, 2026-10-14 (#1876, third=sonnet): 36 s, one cosmetic nit,
   dropped. It missed a type error that broke the build (CI red) and the two
   fail-open findings Source B made. Give Source C the CI state: setup could

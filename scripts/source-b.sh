@@ -8,32 +8,34 @@
 #
 # --bg detaches and returns at once (log in /tmp/pr-<N>-source-b.log); use it
 # whenever the harness's shell tool has no background option of its own.
-# PRR_PASS_THINKING sets pi's thinking level (default high).
+# PRR_PASS_HARNESS: pi, opencode or codex; unset, the first one installed in
+# that order (pass-common.sh has why each is safe to run read-only).
+# PRR_PASS_THINKING sets the thinking level (default high; off for a local
+# Ollama model, whose unbudgeted thinking can run away).
 # PRR_PASS_MIN_SECONDS (default 30): a run faster than this is hollow.
 #
 # Run it right after setup-review.sh, do Source A, then read
 # /tmp/pr-<N>-source-b.md: a prose report ending in the fenced json block the
-# skill's step 2 describes. Needs pi (https://github.com/badlogic/pi-mono) and
-# a model it knows; there is deliberately no default model, because the diff
+# skill's step 2 describes. Needs one of the harnesses and a model it knows; there is deliberately no default model, because the diff
 # goes wherever the model runs.
 #
 # Author: Steve Woodruff (@sjwoodr)
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
-PI_PASS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=pi-pass-common.sh
-. "$PI_PASS_DIR/pi-pass-common.sh"
+PASS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=pass-common.sh
+. "$PASS_DIR/pass-common.sh"
 
 bg=0
 [[ "${1:-}" == "--bg" ]] && { bg=1; shift; }
 number="${1:?usage: source-b.sh [--bg] <pr-number> [model]}"
 model="${2:-${PRR_SOURCE_B_MODEL:-}}"
-pi_pass_preflight source-b "$number" "$model" || exit 2
+pass_preflight source-b "$number" "$model" || exit 2
 
-"$PI_PASS_DIR/source-b-clock.sh" start "$number" >/dev/null
+"$PASS_DIR/source-b-clock.sh" start "$number" >/dev/null
 if (( bg )); then
-  pi_pass_detach "/tmp/pr-${number}-source-b.log" "$0" "$number" "$model"
+  pass_detach "/tmp/pr-${number}-source-b.log" "$0" "$number" "$model"
   exit 0
 fi
 
@@ -60,4 +62,4 @@ members you enumerated. No evidence, no finding; an empty list is a fine answer.
 End your reply with a fenced json block, exactly this shape:
 {\"findings\":[{\"severity\":\"blocker | notable | nit\",\"title\":\"\",\"file\":\"path under $wt\",\"line\":0,\"failure_scenario\":\"\",\"fix\":\"\",\"verified\":\"read-the-code | inferred-from-diff | assumption\",\"evidence\":\"\"}],\"cleared\":[{\"claim\":\"\",\"evidence\":\"\"}]}"
 
-pi_pass_run source-b "$number" "$model" "$brief" "/tmp/pr-${number}-source-b.md" b-done || exit 1
+pass_run source-b "$number" "$model" "$brief" "/tmp/pr-${number}-source-b.md" b-done || exit 1
