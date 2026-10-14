@@ -272,8 +272,14 @@ money per review and receives the diff.
   (`PRR_PASS_THINKING`); a run under 30 seconds (`PRR_PASS_MIN_SECONDS`) or an
   empty report counts as failed, not returned.
 - `PRR_SOURCE_C_TIMEOUT` bounds the wait like `PRR_SOURCE_B_TIMEOUT`.
-- The posted review's `prr-meta` marker records `source_c`, the model and its
-  seconds; older markers are unchanged.
+- The gate tags every finding with its sources (`[A]`, `[B]`, `[C]`, `[A+C]`)
+  and ends with a Sources block: per source, the model, seconds, findings
+  raised and kept, and every finding only that source raised ("only C:
+  none" when that is the answer), with the reason for each one dropped.
+- The posted review's `prr-meta` marker records `source_c`, the model, its
+  seconds and the counts (`c_found`, `c_only`, `c_kept`, `c_only_kept`), so
+  whether `third` earns its cost can be read off posted reviews; older
+  markers are unchanged.
 - From two trials on one PR (Ollama cloud, pay as you go, 2026-10-14):
   glm-5.3 cost $1.91 for a whole review and found one real point the Claude
   passes missed; kimi-k2.7-code cost $1.44 and both its findings were wrong.

@@ -50,3 +50,7 @@ Next:
   path end to end, then one pi run with glm-5.3 when there is credit.
 - Watch what Source C alone found across runs; if it is nothing, say so in
   the README and stop recommending it.
+- First run, 2026-10-14 (#1876, third=sonnet): 36 s, one cosmetic nit,
+  dropped. It missed a type error that broke the build (CI red) and the two
+  fail-open findings Source B made. Give Source C the CI state: setup could
+  write the check runs to /tmp/pr-<N>-checks.txt and the brief point at it.

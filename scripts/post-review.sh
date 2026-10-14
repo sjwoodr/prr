@@ -295,6 +295,14 @@ if [[ -n "$source_c" ]]; then
   esac
   c_model="$(jq -r '.source_c_model // "-"' "$payload" | tr -cd 'A-Za-z0-9._:/-' | cut -c1-60)"
   source_c_meta=" source_c=${source_c} c_model=${c_model:--} c_s=$(since "$(stamp sourcec-started)" "$(stamp c-done)")"
+  # What it contributed, from the gate's Sources block: the numbers that say
+  # whether the extra pass earns its cost. Counts only, as for `ac`.
+  c_counts="$(jq -r '
+    def n(k): (.[k] // 0) | (tonumber? // 0) | floor | if . < 0 then 0 else . end;
+    .source_c_counts | if type == "object" then
+      "c_found=\(n("found")) c_only=\(n("only")) c_kept=\(n("kept")) c_only_kept=\(n("only_kept"))"
+    else empty end' "$payload")"
+  source_c_meta="${source_c_meta}${c_counts:+ $c_counts}"
 fi
 t0="$(stamp started)"
 fanout=0; [[ -n "${PRR_FANOUT_PANE:-}" ]] && fanout=1
@@ -334,7 +342,7 @@ meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fan
 # the review, in the existing threads; they are never part of the review.
 replies="$(jq -c '[.replies // [] | .[] | select((.in_reply_to | type) == "number" and ((.body // "") != ""))]' "$payload")"
 
-jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .prior, .ac, .author_replies, .replies)
+jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .source_c_counts, .prior, .ac, .author_replies, .replies)
     | if ((.body // "") | contains("<!-- prr -->")) then .
       else .body = ((.body // "") + "\n\n<!-- prr -->") end
     | if ((.body // "") | contains("<!-- prr-meta ")) then .

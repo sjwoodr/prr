@@ -714,9 +714,11 @@ leads, not evidence, until you have checked them too.
 - Carry Source B's `cleared` list into the report wherever it answers a
   question the author would otherwise have to ask. Knowing what was examined
   and found fine is half of what makes a review worth reading.
-- With Source C: merge its verified findings like the others, and note at the
-  gate which findings only Source C raised. That count is how the user judges
-  whether the extra pass earns its cost.
+- **Keep track of who raised each finding**: A, B, C or a combination. A
+  finding two sources reached independently is stronger evidence, and the
+  gate's "Sources" block (step 5) is built from this. Source C's findings are
+  merged like the others once verified; what it alone raised, kept or
+  dropped, is how the user judges whether the extra pass earns its cost.
 
 ## 4. Draft inline comments
 
@@ -802,8 +804,9 @@ the chance to concur. Fold anything new in by step 3's rules (concur, or say
 why you disagree), and drop any drafted comment it now duplicates.
 
 Show the user:
-- The ranked findings.
-- Every drafted inline comment (file, line, body) verbatim.
+- The ranked findings, each tagged with the sources that raised it: `[A]`,
+  `[B]`, `[A+B]`, `[C]`, `[A+C]` and so on.
+- Every drafted inline comment (file, line, body) verbatim, with the same tag.
 - The concurred list from step 3, if any, so it is clear which findings are
   going into the summary body instead of getting an inline comment.
 - The acceptance-criteria check from step 2: one line per criterion with its
@@ -813,8 +816,24 @@ Show the user:
 - The proposed verdict.
 - If Source B failed or was skipped, one line saying which, so the user knows
   the review is single-source before they answer.
-- With Source C: its model, what happened to it, and which findings only it
-  raised (or "none").
+- A **Sources** block, one line per source that ran, in this shape:
+
+  ```
+  Sources
+    A  opus (you)      7 findings, 4 kept
+    B  opus, 214 s     4 findings, 2 kept; only B: none
+    C  sonnet, 36 s    1 finding, 0 kept; only C: "toast lost its prefix"
+                       (dropped: deliberate, the server now sends the message)
+  ```
+
+  Seconds come from the clock stamps; "kept" means in the drafts or the
+  concurred list after verification. Name every finding only that source
+  raised, kept or dropped, and give the reason for each one dropped. Write
+  "only C: none" when that is the case: it is the line the user reads to
+  decide whether `third` is worth its cost, so it is never left out or
+  folded into prose. Add the B line and the C line only for sources that ran;
+  a failed or timed-out source gets its line with the outcome instead of
+  counts.
 
 **Before asking, save the drafted inline comments, exactly as shown, to
 `/tmp/pr-<N>-draft.json`** (a JSON array of `{path, line, side, body}`, plus
@@ -916,10 +935,11 @@ they fix things.
 
 Write the whole report, not a digest: the ranked findings with their
 `file:line` citations, the drafted comments as notes, the concurred and
-cleared lists, and the verdict. Open it with a short header naming the PR
-URL, the head sha you reviewed, the mode, and whether the pass was
-dual-source or single-source (and if single, why) — a file outlives the
-session that explains it. Same plain-ASCII writing rules as step 4.
+cleared lists, the Sources block, and the verdict. Open it with a short
+header naming the PR URL, the head sha you reviewed, the mode, and whether
+the pass was dual-source or single-source (and if single, why) — a file
+outlives the session that explains it. Same plain-ASCII writing rules as
+step 4.
 
 The `prr-` prefix is load-bearing. Step 6's cleanup globs `/tmp/pr-<N>-*` and
 deletes everything it matches, so a findings file named into that pattern is
@@ -953,6 +973,10 @@ containing:
   `no-model`) and the model name as given. Stripped and recorded like
   `source_b`; `check-payload.py` refuses a payload that leaves it out once
   Source C was started, or claims `returned` without its `c-done` stamp.
+- `source_c_counts` — with `source_c: "returned"`, the counts from the
+  Sources block: `{"found": N, "only": N, "kept": N, "only_kept": N}`
+  (findings it raised, raised by it alone, kept, and kept of those it alone
+  raised). Counts only, recorded in `prr-meta` and stripped.
 - `ac` — the acceptance-criteria counts from step 2, as
   `{"done": N, "partly": N, "missing": N, "unclear": N}`, or one of the
   strings `"no-ticket"`, `"no-criteria"` or `"unread"` when there was

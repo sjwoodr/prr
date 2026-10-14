@@ -18,8 +18,9 @@ Source B skip that the rules did not allow and "no ticket" for a linked one):
   stamp, and "skipped-prose" a change where every file is plain prose. A full
   review has to say what happened to Source B at all.
 - source_c (opt-in): optional, but once Source C was started a payload must
-  say what happened to it; "returned" needs its c-done stamp, and every other
-  outcome but "no-model" and "skipped-prose" needs its start stamp.
+  say what happened to it; "returned" needs its c-done stamp and consistent
+  source_c_counts (what it contributed), and every other outcome but
+  "no-model" and "skipped-prose" needs its start stamp.
 - ac: "no-ticket" is refused when the PR's title or body links a ticket.
 """
 import json
@@ -123,6 +124,15 @@ def check_source_c(payload, tmp, number, paths):
         return [f'source_c "{source_c}" is not one of {", ".join(SOURCE_C)}']
     if source_c == "returned" and not stamp("c-done"):
         return ['source_c is "returned" but Source C never stamped c-done']
+    if source_c == "returned":
+        counts = payload.get("source_c_counts")
+        keys = ("found", "only", "kept", "only_kept")
+        if not isinstance(counts, dict) or not all(isinstance(counts.get(k), int) for k in keys):
+            return ['source_c is "returned" but source_c_counts is missing or incomplete: '
+                    'record found, only, kept and only_kept from the gate\'s Sources block']
+        if not (counts["only_kept"] <= counts["only"] <= counts["found"]
+                and counts["only_kept"] <= counts["kept"] <= counts["found"]):
+            return [f"source_c_counts do not add up: {counts}"]
     if source_c in ("failed", "stubbed", "timeout") and not stamp("sourcec-started"):
         return [f'source_c is "{source_c}" but Source C was never started']
     if source_c == "skipped-prose" and not all_prose(paths):
@@ -199,8 +209,12 @@ def selftest():
         put("p.json", {**good, "source_c": "timeout"})
         assert check("7", os.path.join(tmp, "p.json"), tmp) == []
         put("pr-7-c-done", "1\n")
-        put("p.json", {**good, "source_c": "returned"})
+        counts = {"found": 1, "only": 1, "kept": 0, "only_kept": 0}
+        put("p.json", {**good, "source_c": "returned", "source_c_counts": counts})
         assert check("7", os.path.join(tmp, "p.json"), tmp) == []
+        fails({"source_c": "returned"}, "source_c_counts is missing")
+        fails({"source_c": "returned", "source_c_counts": {**counts, "only_kept": None}}, "missing or incomplete")
+        fails({"source_c": "returned", "source_c_counts": {**counts, "only": 2}}, "do not add up")
         os.remove(os.path.join(tmp, "pr-7-sourcec-started"))
         os.remove(os.path.join(tmp, "pr-7-c-done"))
         # A suggestion block is verbatim code: its non-ASCII is allowed.
