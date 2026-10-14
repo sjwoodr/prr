@@ -109,6 +109,9 @@ if [[ "$mode" == "a-done" || "$mode" == "b-done" || "$mode" == "c-done" ]]; then
 fi
 
 if [[ "$mode" == "start" ]]; then
+  # A done stamp left by an earlier, uncleaned run of this PR would read as
+  # this pass finished before it began, and block this pass's own stamp.
+  rm -f "/tmp/pr-${number}-${done_name}"
   printf '%s\n' "$now" >"$stamp"
   if [[ "$budget" -eq 0 ]]; then
     echo "$TAG: ${source_name} clock started for PR #${number}; no cap (${budget_var}=0)"
@@ -118,13 +121,20 @@ if [[ "$mode" == "start" ]]; then
   exit 0
 fi
 
-# check: a finished pass is done whatever the clock says.
+# check: a finished pass is done whatever the clock says. A done stamp older
+# than this pass's start belongs to an earlier run and is ignored: reporting
+# done on it would have the report read while the new pass is still writing it.
 done_at="$(cat "/tmp/pr-${number}-${done_name}" 2>/dev/null || true)"
+started="$(cat "$stamp" 2>/dev/null || true)"
 if [[ "$done_at" =~ ^[0-9]+$ ]]; then
-  started="$(cat "$stamp" 2>/dev/null || true)"
-  [[ "$started" =~ ^[0-9]+$ && "$done_at" -ge "$started" ]] || started="$done_at"
-  echo "VERDICT=done ELAPSED=$((done_at - started)) BUDGET=${budget}"
-  exit 0
+  if [[ ! "$started" =~ ^[0-9]+$ ]]; then
+    echo "VERDICT=done ELAPSED=0 BUDGET=${budget}"
+    exit 0
+  elif (( done_at >= started )); then
+    echo "VERDICT=done ELAPSED=$((done_at - started)) BUDGET=${budget}"
+    exit 0
+  fi
+  echo "$TAG: ignoring /tmp/pr-${number}-${done_name}: older than this pass's start" >&2
 fi
 
 if [[ ! -r "$stamp" ]]; then
