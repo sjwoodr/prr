@@ -554,6 +554,9 @@ It prints one line and always exits 0:
 - `VERDICT=nostamp` — you forgot to `start`. Stamp it now and keep waiting.
   It deliberately does not read as an expired budget, because that would
   silently turn every review single-source.
+- `VERDICT=done` — the pass's `b-done` / `c-done` stamp exists: its report is
+  in. For a subagent you already know from the notification; for a detached
+  `source-b.sh` / `source-c.sh` run it is the signal to read the report file.
 
 The budget defaults to 900 seconds and is set by `PRR_SOURCE_B_TIMEOUT` (see
 the README). Do not implement the timeout yourself with date arithmetic, and

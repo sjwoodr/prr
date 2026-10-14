@@ -35,6 +35,11 @@
 #   VERDICT=timeout  ELAPSED=912 BUDGET=900 REMAINING=0
 #   VERDICT=nocap    ELAPSED=123 BUDGET=0
 #   VERDICT=nostamp  ELAPSED=0   BUDGET=900 REMAINING=900
+#   VERDICT=done     ELAPSED=130 BUDGET=900
+#
+# done means the pass's b-done / c-done stamp exists, so its report is in.
+# source-b.sh and source-c.sh stamp it only for a real report, which makes it
+# the one signal a detached pi/opencode/codex run gives.
 #
 # nostamp means `start` was never run for this PR. It reports `nostamp` rather
 # than `timeout` on purpose: a missing stamp is a skill bug, and resolving it
@@ -67,12 +72,12 @@ number="${2:-}"
 [[ -n "$mode" && -n "$number" ]] || usage
 # Source C reuses every rule below with its own stamp, budget and wording;
 # c-done is a done stamp like a-done and b-done.
-source_name="source B"; stamp_name="sourceb-started"; budget_var="PRR_SOURCE_B_TIMEOUT"
+source_name="source B"; stamp_name="sourceb-started"; budget_var="PRR_SOURCE_B_TIMEOUT"; done_name="b-done"
 case "$mode" in
   start | check | a-done | b-done | c-done) ;;
   c-start | c-check)
     mode="${mode#c-}"
-    source_name="source C"; stamp_name="sourcec-started"; budget_var="PRR_SOURCE_C_TIMEOUT" ;;
+    source_name="source C"; stamp_name="sourcec-started"; budget_var="PRR_SOURCE_C_TIMEOUT"; done_name="c-done" ;;
   *) usage ;;
 esac
 # Digits only: the number lands in a /tmp path, so reject anything that could
@@ -113,7 +118,15 @@ if [[ "$mode" == "start" ]]; then
   exit 0
 fi
 
-# check
+# check: a finished pass is done whatever the clock says.
+done_at="$(cat "/tmp/pr-${number}-${done_name}" 2>/dev/null || true)"
+if [[ "$done_at" =~ ^[0-9]+$ ]]; then
+  started="$(cat "$stamp" 2>/dev/null || true)"
+  [[ "$started" =~ ^[0-9]+$ && "$done_at" -ge "$started" ]] || started="$done_at"
+  echo "VERDICT=done ELAPSED=$((done_at - started)) BUDGET=${budget}"
+  exit 0
+fi
+
 if [[ ! -r "$stamp" ]]; then
   echo "$TAG: no spawn stamp at $stamp -- was 'start' run? Resolving toward waiting." >&2
   echo "VERDICT=nostamp ELAPSED=0 BUDGET=${budget} REMAINING=${budget}"
