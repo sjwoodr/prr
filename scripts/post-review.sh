@@ -15,8 +15,9 @@
 # A hidden `<!-- prr -->` marker is appended to the body before posting so a
 # later prr run recognises this as a prr review and switches to re-review, and
 # a `<!-- prr-meta ... -->` line records mode, Source B outcome and timings.
-# Optional payload field: source_b (returned|skipped-prose|rereview|failed|
-# stubbed|timeout), stripped before posting.
+# Optional payload fields: source_b (returned|skipped-prose|rereview|failed|
+# stubbed|timeout); source_c and source_c_model for the opt-in Source C. All
+# are stripped before posting.
 # A full PR URL works from any directory; a bare PR number must be run from
 # inside the PR's git repo.
 #
@@ -282,6 +283,19 @@ esac
 now="$(date +%s)"
 stamp() { local v; v="$(cat "/tmp/pr-${number}-$1" 2>/dev/null || true)"; [[ "$v" =~ ^[0-9]+$ ]] && echo "$v"; return 0; }
 since() { [[ -n "$1" && -n "$2" ]] && echo $(($2 - $1)) || echo -; }
+# Source C is opt-in, so its fields appear only when it was asked for, keeping
+# every older review's marker unchanged. The model name is cut to a safe
+# charset: it lands inside an HTML comment.
+source_c="$(jq -r '.source_c // empty' "$payload")"
+source_c_meta=""
+if [[ -n "$source_c" ]]; then
+  case "$source_c" in
+    returned|failed|stubbed|timeout|skipped-prose|no-model) ;;
+    *) source_c="unknown" ;;
+  esac
+  c_model="$(jq -r '.source_c_model // "-"' "$payload" | tr -cd 'A-Za-z0-9._:/-' | cut -c1-60)"
+  source_c_meta=" source_c=${source_c} c_model=${c_model:--} c_s=$(since "$(stamp sourcec-started)" "$(stamp c-done)")"
+fi
 t0="$(stamp started)"
 fanout=0; [[ -n "${PRR_FANOUT_PANE:-}" ]] && fanout=1
 # The payload's optional `prior` (re-review: status of each earlier finding)
@@ -314,13 +328,13 @@ if [[ "$(git -C "$prr_root" rev-parse --show-toplevel 2>/dev/null)" == "$prr_roo
     version="${version}+"
   fi
 fi
-meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
+meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
 
 # Thread replies (payload `replies`: [{in_reply_to, body}]) are posted after
 # the review, in the existing threads; they are never part of the review.
 replies="$(jq -c '[.replies // [] | .[] | select((.in_reply_to | type) == "number" and ((.body // "") != ""))]' "$payload")"
 
-jq --arg meta "$meta" 'del(.slack_summary, .source_b, .prior, .ac, .author_replies, .replies)
+jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .prior, .ac, .author_replies, .replies)
     | if ((.body // "") | contains("<!-- prr -->")) then .
       else .body = ((.body // "") + "\n\n<!-- prr -->") end
     | if ((.body // "") | contains("<!-- prr-meta ")) then .

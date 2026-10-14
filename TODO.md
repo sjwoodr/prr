@@ -15,17 +15,17 @@ port with nothing to find), scored against Opus /prr on the same PR.
   unacknowledged.
 
 Open:
-- Done (uncommitted, 2026-10-14): source-b.sh fails an empty report or a run
-  under 30 s, passes `--thinking high`, and closes pi's stdin (`pi -p` with a
-  non-TTY stdin waits on it forever).
-- Background Source B in pi: glm-5.3 called pi's bash with Claude Code's
-  `run_in_background`, which pi ignores, so Source B ran in the foreground and
-  the review went serial (+7 min). Give source-b.sh a `--bg` that detaches
-  itself (nohup, report and stamps as now), and have the skill use it outside
-  Claude Code. The main session also can't run the 15-minute clock while it
-  blocks, so nothing caps Source B's cost (~$1.13 of glm's $1.91).
+- Done 2026-10-14: source-b.sh fails an empty report or a run under 30 s,
+  passes `--thinking high`, closes pi's stdin (`pi -p` with a non-TTY stdin
+  waits on it forever), and detaches itself with `--bg`. Both trial models
+  passed Claude Code's `run_in_background` to pi's bash, which pi ignores, so
+  Source B ran in the foreground and nothing could cap its cost. `--bg` is
+  untested in a real pi run yet.
 - pi runs: start with `--no-extensions`; round 2 web-searched the internal
   ticket key. The skill should say never to web-search internal identifiers.
+  `--no-extensions` is not enough: kimi-k2.7-code, unprompted, curled the
+  local SearXNG through pi's bash (a placeholder query, nothing leaked). The
+  main session needs bash for the scripts, so only the network can stop it.
 - Diligence can't be enforced by the scripts. The real test is a PR with a
   known planted bug; also try a stronger open model (kimi-k3, glm-5.3).
 - check-payload.py, the draft lock and PRR_POST=off are worth keeping for any
@@ -33,43 +33,20 @@ Open:
 - prr-auto's beta branch carries the one line that saves drafts; keep the two
   repos' branches in step.
 
-## Opt-in third pass from a different model family
+## Opt-in third pass (Source C): built on beta 2026-10-14, untried
 
-Sources A and B are both Claude, so they share blind spots. Add an opt-in
-Source C: a model from another family, run through Ollama (a cloud-hosted
-frontier model such as `glm-5.3:cloud` or `kimi-k3:cloud`, or a local model).
+`/prr third <PR>` or `third=<model>`, model from `PRR_SOURCE_C_MODEL` when
+bare. Any model: a Claude one runs as a subagent, anything else through
+`scripts/source-c.sh` (pi, read-only). Both use `scripts/source-c-brief.md`,
+a general review rather than a second security pass, since glm's one useful
+find on #1875 was about test coverage. Every Source C finding is verified by
+Claude before the gate (kimi's Source B marked two wrong findings
+`read-the-code`); the gate names what only Source C found. Clock `c-start`,
+`c-check`, `c-done`; `source_c`/`source_c_model` in the payload, checked by
+check-payload.py and recorded in prr-meta only when present.
 
-- Run it as a read-only agent that searches the worktree itself, not with
-  hand-picked files, e.g. pi:
-  `pi -p --no-session --no-mcp --no-extensions --tools read,grep,find,ls --model ollama/<model>`.
-  Anything it can read but not search sees only what the caller chose.
-- Opt-in only: a flag (`/prr third <PR>`) or an env var naming the model.
-  Default off, since it sends the diff to another provider.
-- Treat its findings as Source B's are treated: verify each against the code
-  before it reaches the gate. In trials, small local models (Gemma 26B,
-  gpt-oss 20B) reached wrong conclusions or cited files that do not exist;
-  gpt-oss 120B (cloud) checked its claims and got them right. Local models
-  are not worth the wait for this.
-- Same JSON output contract and wait budget as Source B; record its outcome
-  in `prr-meta`.
-
-### Shape: `scripts/source-c.sh <PR>`
-
-A script in this repo, not a dependency on a personal helper, since the
-repo has to work for anyone who installs it.
-
-- On when `PRR_SOURCE_C_MODEL` is set (e.g. `ollama/glm-5.3:cloud`), off
-  otherwise, like `PRR_SOURCE_B_TIMEOUT` and `PRR_FANOUT`.
-- Runs pi read-only in `/tmp/pr-<N>-wt`, with the diff path and the JSON
-  contract in the prompt; writes its report to `/tmp/prr-source-c-<N>.json`
-  for the review to read. Stamped by the same clock as Source B.
-- Needs an agent loop, so pi (or a similar CLI) is a hard dependency.
-  `ollama run` alone is chat with no tools: the model would see only the
-  pasted diff, which is the hand-picked-context weakness this pass exists to
-  avoid. Ollama's API supports tool calls, but driving that loop from bash
-  means rewriting pi.
-- Missing pi, a refused model (e.g. a free plan) or a timeout: skip Source C,
-  say so at the gate, and carry on dual-source. Never block the review.
-- Bare single-statement invocation, so it matches the allow-list like the
-  other scripts.
-- Skipped for plain-prose changes, by the same rule as Source B.
+Next:
+- First real run: `/prr third=sonnet <PR>` (free) to exercise the subagent
+  path end to end, then one pi run with glm-5.3 when there is credit.
+- Watch what Source C alone found across runs; if it is nothing, say so in
+  the README and stop recommending it.

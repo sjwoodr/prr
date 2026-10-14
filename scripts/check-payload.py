@@ -17,6 +17,9 @@ Source B skip that the rules did not allow and "no ticket" for a linked one):
 - source_b: "returned" needs Source B's b-done stamp, "timeout" its start
   stamp, and "skipped-prose" a change where every file is plain prose. A full
   review has to say what happened to Source B at all.
+- source_c (opt-in): optional, but once Source C was started a payload must
+  say what happened to it; "returned" needs its c-done stamp, and every other
+  outcome but "no-model" and "skipped-prose" needs its start stamp.
 - ac: "no-ticket" is refused when the PR's title or body links a ticket.
 """
 import json
@@ -107,6 +110,26 @@ def check_source_b(payload, tmp, number, mode, paths):
     return []
 
 
+SOURCE_C = ("returned", "failed", "stubbed", "timeout", "skipped-prose", "no-model")
+
+
+def check_source_c(payload, tmp, number, paths):
+    source_c = payload.get("source_c")
+    stamp = lambda name: os.path.exists(os.path.join(tmp, f"pr-{number}-{name}"))
+    if source_c is None:
+        return ["source_c missing: Source C was started, so record what happened to it"] \
+            if stamp("sourcec-started") else []
+    if source_c not in SOURCE_C:
+        return [f'source_c "{source_c}" is not one of {", ".join(SOURCE_C)}']
+    if source_c == "returned" and not stamp("c-done"):
+        return ['source_c is "returned" but Source C never stamped c-done']
+    if source_c in ("failed", "stubbed", "timeout") and not stamp("sourcec-started"):
+        return [f'source_c is "{source_c}" but Source C was never started']
+    if source_c == "skipped-prose" and not all_prose(paths):
+        return ['source_c is "skipped-prose" but the change is not all plain prose']
+    return []
+
+
 def check_ac(payload, view):
     if payload.get("ac") != "no-ticket":
         return []
@@ -130,6 +153,7 @@ def check(number, payload_path, tmp="/tmp"):
     return (check_ascii(payload)
             + check_gate(payload, os.path.join(tmp, f"pr-{number}-draft.json"))
             + check_source_b(payload, tmp, number, mode, paths)
+            + check_source_c(payload, tmp, number, paths)
             + check_ac(payload, view))
 
 
@@ -164,6 +188,21 @@ def selftest():
         fails({"ac": "no-ticket"}, "IBX-1")
         put("p.json", {k: v for k, v in good.items() if k != "source_b"})
         assert any("source_b missing" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
+        # Source C is opt-in: absent is fine until it was started.
+        fails({"source_c": "returned"}, "never stamped c-done")
+        fails({"source_c": "timeout"}, "never started")
+        fails({"source_c": "maybe"}, "not one of")
+        put("p.json", {**good, "source_c": "no-model"})
+        assert check("7", os.path.join(tmp, "p.json"), tmp) == []
+        put("pr-7-sourcec-started", "1\n")
+        fails({}, "source_c missing")
+        put("p.json", {**good, "source_c": "timeout"})
+        assert check("7", os.path.join(tmp, "p.json"), tmp) == []
+        put("pr-7-c-done", "1\n")
+        put("p.json", {**good, "source_c": "returned"})
+        assert check("7", os.path.join(tmp, "p.json"), tmp) == []
+        os.remove(os.path.join(tmp, "pr-7-sourcec-started"))
+        os.remove(os.path.join(tmp, "pr-7-c-done"))
         # A suggestion block is verbatim code: its non-ASCII is allowed.
         sugg = {**c1, "body": "Use this:\n```suggestion\nconst s = 'é'\n```"}
         put("pr-7-draft.json", [c1, c2, sugg])

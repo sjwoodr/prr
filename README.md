@@ -80,7 +80,8 @@ and is harmless to ignore in Cursor.)
 
 During a review Claude Code asks you to approve the helper-script runs
 (`setup-review.sh`, `post-review.sh`, `source-b-clock.sh` for the bounded
-security-agent wait, and `prr-fanout.sh` for the multi-PR fan-out) and the one
+security-agent wait, `source-c.sh` for the opt-in third pass, and
+`prr-fanout.sh` for the multi-PR fan-out) and the one
 file write of the review payload to
 `/tmp/pr-<N>-review.json`. To pre-approve just those (scoped to the prr
 scripts and that one payload path, nothing else), add them to your
@@ -98,14 +99,17 @@ jq --arg h "$HOME" '
     "Bash(\($h)/.claude/skills/prr/scripts/post-review.sh:*)",
     "Bash(\($h)/.claude/skills/prr/scripts/source-b-clock.sh:*)",
     "Bash(\($h)/.claude/skills/prr/scripts/prr-fanout.sh:*)",
+    "Bash(\($h)/.claude/skills/prr/scripts/source-c.sh:*)",
     "Bash(~/.claude/skills/prr/scripts/setup-review.sh:*)",
     "Bash(~/.claude/skills/prr/scripts/post-review.sh:*)",
     "Bash(~/.claude/skills/prr/scripts/source-b-clock.sh:*)",
     "Bash(~/.claude/skills/prr/scripts/prr-fanout.sh:*)",
+    "Bash(~/.claude/skills/prr/scripts/source-c.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/setup-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/post-review.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/source-b-clock.sh:*)",
     "Bash(\"$SKILL_DIR\"/scripts/prr-fanout.sh:*)",
+    "Bash(\"$SKILL_DIR\"/scripts/source-c.sh:*)",
     "Edit(/tmp/pr-*-review.json)"
   ]) as $new
   | .permissions.allow = ((.permissions.allow // []) + ($new - (.permissions.allow // [])))
@@ -242,6 +246,39 @@ For calibration, agent runs on real PRs have landed between roughly 100 and
 300 seconds, so the default leaves a wide margin. Raising it costs nothing
 except the wait itself; lowering it below about 300 makes single-source reviews
 routine, which defeats the point of having two passes.
+
+**Opt-in third pass: Source C** (`/prr third <PR>`, `PRR_SOURCE_C_MODEL`)
+
+Sources A and B are the same model, so they share blind spots. `third` adds an
+independent general review (correctness, whether the tests would catch a
+break, what never runs, conventions) from a model you pick, per review:
+
+```bash
+/prr third=sonnet 1880                    # a Claude model: a subagent, no extra cost
+/prr third=ollama/glm-5.3:cloud 1880      # anything else: through pi, read-only
+export PRR_SOURCE_C_MODEL=ollama/glm-5.3:cloud   # the model a bare `third` uses
+```
+
+prr does not care where the report comes from: both paths use the same brief
+(`scripts/source-c-brief.md`) and output contract, and Claude verifies every
+Source C finding in the code before it reaches the gate, whatever the pass
+claimed. The gate names the findings only Source C raised, so you can see
+whether it earns its keep. It is never on by default: an outside model costs
+money per review and receives the diff.
+
+- A non-Claude model needs [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
+  and the model in `~/.pi/agent/models.json`. pi gets only read, grep, find
+  and ls (no shell, so no network), a closed stdin and high thinking
+  (`PRR_PASS_THINKING`); a run under 30 seconds (`PRR_PASS_MIN_SECONDS`) or an
+  empty report counts as failed, not returned.
+- `PRR_SOURCE_C_TIMEOUT` bounds the wait like `PRR_SOURCE_B_TIMEOUT`.
+- The posted review's `prr-meta` marker records `source_c`, the model and its
+  seconds; older markers are unchanged.
+- From two trials on one PR (Ollama cloud, pay as you go, 2026-10-14):
+  glm-5.3 cost $1.91 for a whole review and found one real point the Claude
+  passes missed; kimi-k2.7-code cost $1.44 and both its findings were wrong.
+  A Source C pass alone costs less than a whole review, but budget a dollar
+  or so per run.
 
 ## Parallel multi-PR review (`PRR_FANOUT`)
 
@@ -904,7 +941,12 @@ prr/
 └── scripts/
     ├── setup-review.sh   # worktree + artifacts + full/self/re-review detection
     ├── post-review.sh    # submit the review and clean up
-    ├── source-b-clock.sh # bounds how long the gate waits for the security agent
+    ├── source-b-clock.sh # bounds how long the gate waits for Source B (and C)
+    ├── source-b.sh       # Source B through pi, for harnesses with no subagent tool
+    ├── source-c.sh       # opt-in Source C through pi (non-Claude models)
+    ├── source-c-brief.md # Source C's brief, shared by the pi and subagent paths
+    ├── pi-pass-common.sh # shared pi runner sourced by source-b.sh and source-c.sh
+    ├── check-payload.py  # the rules post-review.sh enforces before posting
     ├── prr-statusline.sh # optional: Claude Code status line (opt-in via settings.json)
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
     ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)

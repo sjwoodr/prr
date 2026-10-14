@@ -20,6 +20,9 @@
 #   source-b-clock.sh check <pr-number>    # report the verdict
 #   source-b-clock.sh a-done <pr-number>   # your own pass (Source A) finished
 #   source-b-clock.sh b-done <pr-number>   # Source B's report arrived
+#   source-b-clock.sh c-start|c-check|c-done <pr-number>
+#                                          # the same for the opt-in Source C,
+#                                          # with its own stamp and budget
 #
 # a-done / b-done only record a time (first call wins) for the per-pass timings
 # post-review.sh writes into the review's hidden prr-meta marker. They live here
@@ -44,6 +47,7 @@
 #                         Anything non-numeric or negative falls back to the
 #                         default with a notice on stderr -- a typo must not
 #                         silently disable the wait.
+#   PRR_SOURCE_C_TIMEOUT  the same for Source C (the c-* modes).
 #
 # Author: Steve Woodruff (@sjwoodr)
 # SPDX-License-Identifier: MIT
@@ -53,7 +57,7 @@ TAG="source-b-clock"
 DEFAULT_BUDGET=900
 
 usage() {
-  echo "$TAG: usage: $(basename "$0") start|check|a-done|b-done <pr-number>" >&2
+  echo "$TAG: usage: $(basename "$0") start|check|a-done|b-done|c-start|c-check|c-done <pr-number>" >&2
   exit 2
 }
 
@@ -61,8 +65,14 @@ mode="${1:-}"
 number="${2:-}"
 
 [[ -n "$mode" && -n "$number" ]] || usage
+# Source C reuses every rule below with its own stamp, budget and wording;
+# c-done is a done stamp like a-done and b-done.
+source_name="source B"; stamp_name="sourceb-started"; budget_var="PRR_SOURCE_B_TIMEOUT"
 case "$mode" in
-  start | check | a-done | b-done) ;;
+  start | check | a-done | b-done | c-done) ;;
+  c-start | c-check)
+    mode="${mode#c-}"
+    source_name="source C"; stamp_name="sourcec-started"; budget_var="PRR_SOURCE_C_TIMEOUT" ;;
   *) usage ;;
 esac
 # Digits only: the number lands in a /tmp path, so reject anything that could
@@ -72,19 +82,21 @@ esac
   exit 2
 }
 
-stamp="/tmp/pr-${number}-sourceb-started"
+stamp="/tmp/pr-${number}-${stamp_name}"
 
 # Budget resolution. Bash 3.2 (stock macOS) is the floor, so no fancy
-# expansions. `0` is an explicit "no cap", matching PRR_FANOUT_TIMEOUT_MINS.
-budget="${PRR_SOURCE_B_TIMEOUT:-$DEFAULT_BUDGET}"
+# expansions (an eval stands in for ${!var}; budget_var is one of two fixed
+# names above, never input). `0` is an explicit "no cap", matching
+# PRR_FANOUT_TIMEOUT_MINS.
+eval "budget=\"\${${budget_var}:-\$DEFAULT_BUDGET}\""
 if ! [[ "$budget" =~ ^[0-9]+$ ]]; then
-  echo "$TAG: PRR_SOURCE_B_TIMEOUT='$budget' is not a non-negative integer; using ${DEFAULT_BUDGET}s" >&2
+  echo "$TAG: ${budget_var}='$budget' is not a non-negative integer; using ${DEFAULT_BUDGET}s" >&2
   budget="$DEFAULT_BUDGET"
 fi
 
 now="$(date +%s)"
 
-if [[ "$mode" == "a-done" || "$mode" == "b-done" ]]; then
+if [[ "$mode" == "a-done" || "$mode" == "b-done" || "$mode" == "c-done" ]]; then
   done_stamp="/tmp/pr-${number}-${mode}"
   [[ -s "$done_stamp" ]] || printf '%s\n' "$now" >"$done_stamp"
   echo "$TAG: ${mode} recorded for PR #${number}"
@@ -94,9 +106,9 @@ fi
 if [[ "$mode" == "start" ]]; then
   printf '%s\n' "$now" >"$stamp"
   if [[ "$budget" -eq 0 ]]; then
-    echo "$TAG: source B clock started for PR #${number}; no cap (PRR_SOURCE_B_TIMEOUT=0)"
+    echo "$TAG: ${source_name} clock started for PR #${number}; no cap (${budget_var}=0)"
   else
-    echo "$TAG: source B clock started for PR #${number}; budget ${budget}s"
+    echo "$TAG: ${source_name} clock started for PR #${number}; budget ${budget}s"
   fi
   exit 0
 fi

@@ -11,7 +11,9 @@ description: >-
   back to the PR. `/prr silent <PR>` reviews stealthily: the approval gate and
   GitHub posting work as usual, but the team's chat channel gets no signal at
   all. `/prr bg <PR>` runs even one review in its own fan-out pane so this
-  session is not blocked. Use when the user runs /prr, asks to review a pull request, or provides
+  session is not blocked. `/prr third <PR>` (or `third=<model>`) adds an
+  opt-in third pass from a model of your choice (a Claude model or one via
+  Ollama). Use when the user runs /prr, asks to review a pull request, or provides
   a PR URL or number to review.
 ---
 
@@ -30,14 +32,17 @@ The steps below explain each part; this is the order, and none is optional.
 1. `setup-review.sh [--silent] <PR>`. Read its `MODE:`, `linked ticket:` and
    `prior comments` lines, then the diff and the PR body in `/tmp/pr-<N>-view.json`.
 2. Start Source B in the background (step 2): your subagent tool, or
-   `scripts/source-b.sh <N>` in a harness without one. Skip it only when every
-   changed file is plain prose.*
+   `scripts/source-b.sh --bg <N>` in a harness without one. Skip it only when
+   every changed file is plain prose.* With `third` in the arguments, start
+   Source C the same way (step 2, "Source C").
 3. Source A, your own pass. A finding needs a line you opened in
    `/tmp/pr-<N>-wt` and can quote; a guess is not a finding.
-4. Wait for Source B, verify its findings the same way, synthesize (step 3).
+4. Wait for Source B (and C), verify their findings the same way, synthesize
+   (step 3).
 5. Write the drafts to `/tmp/pr-<N>-draft.json`, then show the gate and stop (step 5).*
 6. Build the payload from that file: only the drafts the user approved, plain
-   ASCII, an honest `source_b` and `ac`.* Then `post-review.sh`.
+   ASCII, an honest `source_b`, `source_c` (when asked for) and `ac`.* Then
+   `post-review.sh`.
 
 Personal dual-source PR review. The PR to review is provided as the skill
 argument (a full GitHub URL or a bare number). Follow every step in order.
@@ -119,6 +124,16 @@ Clearing a pre-existing `:eyes:` still happens under stealth, since removing a
 reaction only ever takes a signal away. Without that, an ordinary review
 followed by a stealth re-review would strand "reviewing this" on the post for
 good.
+
+**Source C (opt-in third pass).** `third` or `third=<model>` anywhere in the
+arguments (`/prr third 1880`, `/prr silent third=sonnet 1880`) adds an
+independent general review from a model of the user's choosing, alongside
+Source B. Strip the keyword before going further, like `silent`. The model is
+`third=<model>` if given, else `$PRR_SOURCE_C_MODEL`; with neither, say once
+that Source C was asked for but has no model, record `source_c: "no-model"`,
+and carry on dual-source. Off unless asked for, every time: an outside model
+costs money per review and receives the diff. It composes with every other
+keyword and with all three modes except re-review, which runs no sources.
 
 ## Tooling
 
@@ -238,6 +253,10 @@ three checks:
   every review in the batch is stealthy. Omitting it does not fail loudly: the
   batch runs fine and each pane announces itself in chat, which is precisely
   what the user asked to avoid. `silent` and `test-mode` work in either order.
+
+  `third` / `third=<model>` passes through the same way and in any order with
+  `silent` (`prr-fanout.sh silent third=sonnet <PR> <PR>`); each pane then runs
+  Source C on its own review.
 
   The router resolves `PRR_FANOUT` (defaulting to `tmux` when unset) and opens one
   window with a pane per PR, each running `/prr` on a single PR with the approval
@@ -403,10 +422,13 @@ time; the two passes must overlap.
   include the output contract below, though: it is part of the brief, and
   asking for the shape after the fact means re-running the agent.
   **No subagent tool** (pi, a bare CLI): run
-  `~/.claude/skills/prr/scripts/source-b.sh <N>` in the background instead
-  (it needs `$PRR_SOURCE_B_MODEL` or a model argument). It carries this brief
-  and output contract, stamps the clock itself, and writes
-  `/tmp/pr-<N>-source-b.md`. Lacking a subagent tool is never a reason to skip
+  `~/.claude/skills/prr/scripts/source-b.sh --bg <N>` instead (it needs
+  `$PRR_SOURCE_B_MODEL` or a model argument). It carries this brief and
+  output contract, stamps the clock itself, and writes
+  `/tmp/pr-<N>-source-b.md`. Keep `--bg`: it detaches by itself, because a
+  shell tool without a background option (pi's) otherwise blocks the whole
+  review on Source B, and a `run_in_background` argument that tool does not
+  know is silently ignored. Lacking a subagent tool is never a reason to skip
   Source B.
 - **Source A** — your own primary review of the diff: correctness,
   project conventions, test coverage, and the obvious security surface.
@@ -610,6 +632,51 @@ If the block is missing or does not parse, do NOT re-run the agent: read the
 prose and verify more of it by hand. The contract speeds up synthesis, it is
 not a precondition for it.
 
+### Source C (opt-in): a third, independent pass
+
+Only when the arguments asked for it (see "Source C" near the top). prr does
+not care which model it is; only how it is launched depends on it. Its brief
+is `~/.claude/skills/prr/scripts/source-c-brief.md` with `{{N}}` replaced by
+the PR number: a general review (correctness, whether the tests would catch a
+break, what never runs, conventions), with the same output contract as Source
+B. It is not given the ticket, for the same reason as Source B.
+
+Start its clock, then launch it right after Source B, before Source A:
+
+```
+~/.claude/skills/prr/scripts/source-b-clock.sh c-start <PR-number>
+```
+
+- **A Claude model** (`opus`, `sonnet`, `haiku`, `fable`, or a `claude-*`
+  id): spawn a subagent with your agent tool, `general-purpose` type, the
+  model set to that name, `run_in_background: true`, and the brief file's
+  text (with `{{N}}` replaced) as its prompt. No extra cost, runs in
+  parallel. It shares more blind spots with you than an outside model does,
+  which is the user's trade to make.
+- **Any other model** (`ollama/glm-5.3:cloud`, a local model): run
+  `~/.claude/skills/prr/scripts/source-c.sh --bg <N> <model>`. It runs pi
+  read-only (read, grep, find and ls, no shell and so no network), writes
+  `/tmp/pr-<N>-source-c.md`, and stamps `c-done` only for a real report; an
+  empty or seconds-long run is recorded as a failure, not a return. Missing
+  pi, an unknown model or a refused one: record `failed`, say so at the gate,
+  carry on.
+
+The gate waits for Source C exactly as for Source B, with its own budget:
+`source-b-clock.sh c-check <PR-number>` (`PRR_SOURCE_C_TIMEOUT`, default 900
+seconds). A subagent's report arrives as a notification: stamp
+`source-b-clock.sh c-done <PR-number>` when it does. A pi run stamps itself;
+read its report file once `c-check` shows it done or the file is complete.
+Stubs, deaths and timeouts are handled as for Source B, and it is skipped for
+plain-prose changes by the same rule (`skipped-prose`).
+
+**Verify every Source C finding before it reaches the gate, whatever its
+`verified` field says.** In trials an outside model's pass marked two wrong
+findings `read-the-code`: a "coverage lost" claim where the old code behaved
+the same, and a tenancy worry about a system it could not see. What the
+old code did (the `-` lines, the base version) and what the repo documents
+decide such claims, not the agent's confidence. Its `cleared` items are
+leads, not evidence, until you have checked them too.
+
 ## 3. Synthesize
 
 - Merge both passes. Dedupe overlapping findings.
@@ -647,6 +714,9 @@ not a precondition for it.
 - Carry Source B's `cleared` list into the report wherever it answers a
   question the author would otherwise have to ask. Knowing what was examined
   and found fine is half of what makes a review worth reading.
+- With Source C: merge its verified findings like the others, and note at the
+  gate which findings only Source C raised. That count is how the user judges
+  whether the extra pass earns its cost.
 
 ## 4. Draft inline comments
 
@@ -714,9 +784,9 @@ not a precondition for it.
 ## 5. Approval gate — STOP HERE
 
 **Precondition: Source B has returned, has failed, or was skipped as a
-plain-prose docs change per step 2.** Do not open this gate on a
-Source-A-only set of findings while the agent is still running. See "The gate
-WAITS for Source B" in step 2.
+plain-prose docs change per step 2,** and so has Source C when it was asked
+for. Do not open this gate on a Source-A-only set of findings while the agent
+is still running. See "The gate WAITS for Source B" in step 2.
 
 **Then re-read the threads, every time, just before showing the gate:**
 
@@ -743,6 +813,8 @@ Show the user:
 - The proposed verdict.
 - If Source B failed or was skipped, one line saying which, so the user knows
   the review is single-source before they answer.
+- With Source C: its model, what happened to it, and which findings only it
+  raised (or "none").
 
 **Before asking, save the drafted inline comments, exactly as shown, to
 `/tmp/pr-<N>-draft.json`** (a JSON array of `{path, line, side, body}`, plus
@@ -876,6 +948,11 @@ containing:
   `skipped-prose`, `failed`, `stubbed` or `timeout` (a re-review may omit
   it). It is stripped from the posted body and recorded in the hidden
   `prr-meta` marker, so report it honestly.
+- `source_c` and `source_c_model` — only when Source C was asked for: its
+  outcome (`returned`, `failed`, `stubbed`, `timeout`, `skipped-prose` or
+  `no-model`) and the model name as given. Stripped and recorded like
+  `source_b`; `check-payload.py` refuses a payload that leaves it out once
+  Source C was started, or claims `returned` without its `c-done` stamp.
 - `ac` — the acceptance-criteria counts from step 2, as
   `{"done": N, "partly": N, "missing": N, "unclear": N}`, or one of the
   strings `"no-ticket"`, `"no-criteria"` or `"unread"` when there was

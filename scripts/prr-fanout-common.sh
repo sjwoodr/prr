@@ -37,11 +37,13 @@ pane_cmd() {
     # pane suppresses its own Slack signals exactly as `/prr silent <N>` would.
     # PRR_FANOUT_SILENT is set by prr-fanout.sh; default 0 keeps a backend that is
     # invoked directly behaving as before.
-    local silent="" cmd="${PRR_FANOUT_COMMAND:-/prr}"
+    local silent="" third="" cmd="${PRR_FANOUT_COMMAND:-/prr}"
     if [[ "${PRR_FANOUT_SILENT:-0}" == "1" ]]; then silent="silent "; fi
+    # Source C rides the same way (validated in prr-fanout.sh).
+    if [[ -n "${PRR_FANOUT_THIRD:-}" ]]; then third="${PRR_FANOUT_THIRD} "; fi
     # PRR_FANOUT_COMMAND (validated in prr-fanout.sh) lets a skill layered on
     # prr reuse the fan-out with its own slash command.
-    printf 'PRR_FANOUT_PANE=1 claude "%s %s%s"' "$cmd" "$silent" "$ref"
+    printf 'PRR_FANOUT_PANE=1 claude "%s %s%s%s"' "$cmd" "$silent" "$third" "$ref"
   fi
 }
 
