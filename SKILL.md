@@ -22,6 +22,23 @@ description: >-
 
 # prr — PR review workflow
 
+## The run at a glance
+
+The steps below explain each part; this is the order, and none is optional.
+`post-review.sh` refuses a payload that skips one of the starred items.
+
+1. `setup-review.sh [--silent] <PR>`. Read its `MODE:`, `linked ticket:` and
+   `prior comments` lines, then the diff and the PR body in `/tmp/pr-<N>-view.json`.
+2. Start Source B in the background (step 2): your subagent tool, or
+   `scripts/source-b.sh <N>` in a harness without one. Skip it only when every
+   changed file is plain prose.*
+3. Source A, your own pass. A finding needs a line you opened in
+   `/tmp/pr-<N>-wt` and can quote; a guess is not a finding.
+4. Wait for Source B, verify its findings the same way, synthesize (step 3).
+5. Write the drafts to `/tmp/pr-<N>-draft.json`, then show the gate and stop (step 5).*
+6. Build the payload from that file: only the drafts the user approved, plain
+   ASCII, an honest `source_b` and `ac`.* Then `post-review.sh`.
+
 Personal dual-source PR review. The PR to review is provided as the skill
 argument (a full GitHub URL or a bare number). Follow every step in order.
 The approval gate in step 5 is hard: post nothing to GitHub until the user
@@ -385,6 +402,12 @@ time; the two passes must overlap.
   briefing is not worth serializing the work behind your own review. Do
   include the output contract below, though: it is part of the brief, and
   asking for the shape after the fact means re-running the agent.
+  **No subagent tool** (pi, a bare CLI): run
+  `~/.claude/skills/prr/scripts/source-b.sh <N>` in the background instead
+  (it needs `$PRR_SOURCE_B_MODEL` or a model argument). It carries this brief
+  and output contract, stamps the clock itself, and writes
+  `/tmp/pr-<N>-source-b.md`. Lacking a subagent tool is never a reason to skip
+  Source B.
 - **Source A** — your own primary review of the diff: correctness,
   project conventions, test coverage, and the obvious security surface.
   Do this while Source B runs in the background.
@@ -721,6 +744,13 @@ Show the user:
 - If Source B failed or was skipped, one line saying which, so the user knows
   the review is single-source before they answer.
 
+**Before asking, save the drafted inline comments, exactly as shown, to
+`/tmp/pr-<N>-draft.json`** (a JSON array of `{path, line, side, body}`, plus
+`start_line`/`start_side` for a range). Step 6 builds the payload from this
+file, and `post-review.sh` refuses any comment that is not in it: what the user
+approved is what gets posted. Revising a comment after the gate means a new
+draft and asking again.
+
 Then ask with the **`AskUserQuestion` tool** — not a plain-text list, so the
 options are clickable instead of something the user has to type. The
 findings and the drafted comments go in your normal message text; the tool
@@ -886,6 +916,14 @@ removes the worktree and temp artifacts:
 ```
 ~/.claude/skills/prr/scripts/post-review.sh <PR-url-or-number> /tmp/pr-<N>-review.json
 ```
+
+It first runs `scripts/check-payload.py`, which refuses (exit 2, nothing
+posted, worktree kept) a payload with non-ASCII outside a suggestion block, a
+comment not in `/tmp/pr-<N>-draft.json`, a `source_b` the stamps or the file
+list contradict, or `ac: "no-ticket"` on a PR that links one. Fix the payload
+and run it again; never route around the script. With `PRR_POST=off` set it
+then stops before posting (exit 3) and keeps the payload in
+`/tmp/prr-would-post-<N>.json`, for trials of a new model or harness.
 
 Do NOT add `--silent` here even for a stealth review. The post script reads the
 marker `setup-review.sh` left and suppresses the Slack signals by itself; the
@@ -1080,7 +1118,8 @@ Show the user:
   `COMMENT` if it is genuinely unclear whether the blockers were
   addressed and you need more information from the author to decide.
 
-Re-read the threads with `setup-review.sh --threads` first, as step 5 does.
+Re-read the threads with `setup-review.sh --threads` first, as step 5 does,
+and save any drafted inline comments to `/tmp/pr-<N>-draft.json` as step 5 does.
 
 Then ask with `AskUserQuestion`, same as step 5. Re-review always keeps a
 "report only" option, because posting nothing is a normal outcome here.

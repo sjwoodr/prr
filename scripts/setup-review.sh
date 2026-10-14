@@ -261,6 +261,20 @@ artifacts:
   prior comments:  $comments
 EOF
 
+# What the review has to account for, printed so no model has to dig it out of
+# the JSON: the linked ticket (step 1 reads its acceptance criteria) and who
+# already commented where (step 3 concurs instead of repeating them).
+tickets="$(jq -r '(.title // "") + "\n" + (.body // "")' "$view" \
+  | grep -oE 'atlassian\.net/browse/[A-Z][A-Z0-9]+-[0-9]+|github\.com/[^/ ]+/[^/ ]+/issues/[0-9]+|^\[[A-Z][A-Z0-9]+-[0-9]+\]' \
+  | sed -E 's#.*/browse/##; s#^\[##; s#\]$##' | sort -u | paste -sd' ' - || true)"
+echo "linked ticket:     ${tickets:-none in the title or body}"
+jq -r --slurpfile view "$view" '
+  ( [ .[] | "  inline  \(.user.login)  \(.path):\(.line // .original_line // "-")  \(.body | gsub("\n"; " ") | .[0:120])" ]
+  + [ $view[0].reviews[]? | select((.body // "") != "")
+      | "  review  \(.author.login)  \(.state)  \(.body | gsub("\n"; " ") | .[0:120])" ] )
+  | if length == 0 then "prior comments:    none" else "prior comments (concur, do not repeat):", .[] end
+' "$comments" 2>/dev/null || true
+
 if ((silent)); then
   cat <<EOF
 silent mode:

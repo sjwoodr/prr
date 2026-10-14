@@ -236,6 +236,31 @@ fi
 jq empty "$payload" 2>/dev/null \
   || { echo "error: payload is not valid JSON: $payload" >&2; exit 2; }
 
+# The skill's hard rules, checked here rather than trusted: ASCII, only the
+# comments drafted at the gate, an honest source_b and ac. A refusal leaves the
+# worktree and payload in place so the review can be fixed and re-run.
+if ! python3 "$script_dir/check-payload.py" "$number" "$payload"; then
+  echo "       Nothing was posted; worktree and payload left in place." >&2
+  exit 2
+fi
+
+# PRR_POST=off: a posting guard for runs where the approval gate rests on a
+# model nobody has vetted yet (another harness, another model). The script,
+# not the model, refuses: the payload is kept outside the /tmp/pr-<n>-* glob
+# so a human can read what would have been posted, and the run cleans up as
+# if the gate had been declined.
+case "$(printf '%s' "${PRR_POST:-on}" | tr '[:upper:]' '[:lower:]')" in
+  off|0|false|no|none)
+    blocked="/tmp/prr-would-post-${number}.json"
+    cp "$payload" "$blocked"
+    echo "PRR_POST=off: not posting. The review that would have been posted is in $blocked"
+    clear_eyes
+    cleanup
+    write_fanout_result not-posted
+    exit 3
+    ;;
+esac
+
 # Pull out the optional plain-language thread summary, then strip it from the
 # body posted to GitHub (the reviews endpoint should only see real review
 # fields). Append the prr marker (idempotent) so future runs detect this.
