@@ -15,8 +15,15 @@ port with nothing to find), scored against Opus /prr on the same PR.
   unacknowledged.
 
 Open:
-- source-b.sh: treat an empty report (no cleared items, no prose) or a run
-  under ~30 s as failed, not returned; pass a thinking level (`--thinking high`).
+- Done (uncommitted, 2026-10-14): source-b.sh fails an empty report or a run
+  under 30 s, passes `--thinking high`, and closes pi's stdin (`pi -p` with a
+  non-TTY stdin waits on it forever).
+- Background Source B in pi: glm-5.3 called pi's bash with Claude Code's
+  `run_in_background`, which pi ignores, so Source B ran in the foreground and
+  the review went serial (+7 min). Give source-b.sh a `--bg` that detaches
+  itself (nohup, report and stamps as now), and have the skill use it outside
+  Claude Code. The main session also can't run the 15-minute clock while it
+  blocks, so nothing caps Source B's cost (~$1.13 of glm's $1.91).
 - pi runs: start with `--no-extensions`; round 2 web-searched the internal
   ticket key. The skill should say never to web-search internal identifiers.
 - Diligence can't be enforced by the scripts. The real test is a PR with a

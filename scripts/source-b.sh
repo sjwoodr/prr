@@ -6,6 +6,9 @@
 # Usage:
 #   source-b.sh <pr-number> [model]       model defaults to $PRR_SOURCE_B_MODEL
 #
+# PRR_SOURCE_B_THINKING sets pi's thinking level (default high).
+# PRR_SOURCE_B_MIN_SECONDS (default 30): a run faster than this is hollow.
+#
 # Run it in the background right after setup-review.sh, do Source A, then read
 # /tmp/pr-<N>-source-b.md: a prose report ending in the fenced json block the
 # skill's step 2 describes. Needs pi (https://github.com/badlogic/pi-mono) and
@@ -49,11 +52,28 @@ members you enumerated. No evidence, no finding; an empty list is a fine answer.
 End your reply with a fenced json block, exactly this shape:
 {\"findings\":[{\"severity\":\"blocker | notable | nit\",\"title\":\"\",\"file\":\"path under $wt\",\"line\":0,\"failure_scenario\":\"\",\"fix\":\"\",\"verified\":\"read-the-code | inferred-from-diff | assumption\",\"evidence\":\"\"}],\"cleared\":[{\"claim\":\"\",\"evidence\":\"\"}]}"
 
-if pi -p --no-session --no-extensions --no-skills --no-context-files \
-     --tools read,grep,find,ls --model "$model" "$brief" >"$out" 2>&1; then
-  "$script_dir/source-b-clock.sh" b-done "$number" >/dev/null
-  echo "source-b: done, report in $out"
-else
-  echo "source-b: the agent failed (exit $?); see $out. Record source_b as failed." >&2
+thinking="${PRR_SOURCE_B_THINKING:-high}"
+started=$(date +%s)
+rc=0
+pi -p --no-session --no-extensions --no-skills --no-context-files \
+  --tools read,grep,find,ls --model "$model" --thinking "$thinking" \
+  "$brief" </dev/null >"$out" 2>&1 || rc=$?
+if (( rc != 0 )); then
+  echo "source-b: the agent failed (exit $rc); see $out. Record source_b as failed." >&2
   exit 1
 fi
+elapsed=$(( $(date +%s) - started ))
+
+# A clean exit is not a report. One trial returned an empty json block after
+# 2 s and was recorded as `returned`. Too fast to have read the diff, or no
+# finding, no cleared item and almost no prose, is a failure: no b-done stamp.
+min_seconds="${PRR_SOURCE_B_MIN_SECONDS:-30}"
+items=$(grep -cE '"(claim|title)"[[:space:]]*:[[:space:]]*"[^"]' "$out" || true)
+prose=$(wc -c <"$out")
+if (( elapsed < min_seconds )) || (( items == 0 && prose < 400 )); then
+  echo "source-b: hollow report (${elapsed}s, ${items} findings/cleared, ${prose} bytes); see $out. Record source_b as failed." >&2
+  exit 1
+fi
+
+"$script_dir/source-b-clock.sh" b-done "$number" >/dev/null
+echo "source-b: done in ${elapsed}s, report in $out"
