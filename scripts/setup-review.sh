@@ -88,7 +88,12 @@ if ((threads)); then
     + [ $reviews[] | select(.user.login != $me and .submitted_at != null and recent(.submitted_at) and ((.body // "") != ""))
         | "review  \(.user.login)  \(.state)\n        \(.body | gsub("\n"; " ") | .[0:300])" ] )
     | .[]' "$comments")"
-  echo "prr threads: ${repo} #${number}, since $( ((started)) && date -d "@$started" '+%H:%M:%S' || echo 'the beginning')"
+  # GNU date takes -d @epoch, BSD/macOS date takes -r epoch.
+  since='the beginning'
+  if ((started)); then
+    since="$(date -d "@$started" '+%H:%M:%S' 2>/dev/null || date -r "$started" '+%H:%M:%S')"
+  fi
+  echo "prr threads: ${repo} #${number}, since ${since}"
   if [[ -n "$new" ]]; then
     printf '%s\n' "$new"
   else
