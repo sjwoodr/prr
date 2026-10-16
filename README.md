@@ -516,8 +516,9 @@ your earlier prr review and switches to an **incremental re-review**:
 - It proposes an updated verdict (e.g. APPROVE once every blocker is
   resolved).
 
-To force a full fresh review of an already-reviewed PR, say so when you
-invoke it.
+To force a full fresh review of an already-reviewed PR (say, after a major
+rework), add `full`: `/prr full <PR>`, or `/prr full C=opus <PR>` to run all
+three passes. It works in a fan-out batch too.
 
 ## JEB: Just Evidence, Buddy
 

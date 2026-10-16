@@ -72,15 +72,19 @@ fi
 #                    model lands in a quoted pane command, so it must be plain
 #                    (letters, digits and . _ : / -). `third` is an old alias; `noC`
 #                    skips the Source C a self-review runs by default.
+#   full             a full review even of a PR you already reviewed; rides to
+#                    the panes as PRR_FANOUT_FULL.
 TEST=0
 SILENT=0
 SOURCE_C=""
+FULL=0
 while :; do
   case "${1:-}" in
     test-mode)       TEST=1;   shift ;;
     silent|--silent) SILENT=1; shift ;;
     C|third)         SOURCE_C="C"; shift ;;
     noC)             SOURCE_C="noC"; shift ;;
+    full)            FULL=1; shift ;;
     C=*|third=*)
       [[ "${1#*=}" =~ ^[A-Za-z0-9._:/-]+$ ]] \
         || { echo "prr-fanout: bad Source C model in '$1'" >&2; exit 2; }
@@ -130,6 +134,7 @@ export PRR_FANOUT="$backend"
 # three stay untouched.
 export PRR_FANOUT_SILENT="$SILENT"
 export PRR_FANOUT_SOURCE_C="$SOURCE_C"
+export PRR_FANOUT_FULL="$FULL"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="$here/prr-fanout-$backend.sh"
 [[ -x "$target" ]] || { echo "prr-fanout: backend script not found: $target" >&2; exit 3; }

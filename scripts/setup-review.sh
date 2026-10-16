@@ -4,7 +4,7 @@
 # a full review, a self-review of your own PR (full pass, report-only), or
 # a re-review of a PR you already reviewed.
 #
-# Usage:  setup-review.sh [--silent] <PR-url-or-number> [owner/repo]
+# Usage:  setup-review.sh [--silent] [--full] <PR-url-or-number> [owner/repo]
 #         setup-review.sh --threads <PR-url-or-number> [owner/repo]
 # A full PR URL works from any directory; a bare PR number must be run from
 # inside the PR's git repo.
@@ -27,11 +27,14 @@ set -euo pipefail
 # `/prr silent <PR>`, mirroring `/prr test-mode <PR>`.
 silent=0
 threads=0
+force_full=0
 _args=()
 for _a in "$@"; do
   case "$_a" in
     --silent|silent) silent=1 ;;
     --threads) threads=1 ;;
+    # A full review even when you already reviewed this PR (a major rework).
+    --full|full) force_full=1 ;;
     *) _args+=("$_a") ;;
   esac
 done
@@ -203,6 +206,12 @@ else
   ' "$reviews")"
 fi
 
+forced_full=""
+if [[ -n "$prior" ]] && ((force_full)); then
+  forced_full="$(jq -r '"\(.state) at \(.commit_id // "?" | .[0:9])"' <<<"$prior")"
+  prior=""
+fi
+
 if [[ -n "$prior" ]]; then
   mode="re-review"
   review_id="$(jq -r .id <<<"$prior")"
@@ -260,6 +269,11 @@ prr setup complete
   files changed:   $(jq '.files | length' "$view")
   prior comments:  $(jq 'length' "$comments")
   MODE:            $mode
+EOF
+if [[ -n "$forced_full" ]]; then
+  echo "  forced full:     yes, your earlier review ($forced_full) is ignored"
+fi
+cat <<EOF
 artifacts:
   view json:       $view
   diff:            $diff

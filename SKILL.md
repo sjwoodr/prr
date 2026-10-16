@@ -87,9 +87,17 @@ project-local `.cursor/skills/prr`), use that path instead of
   findings were addressed by the commits pushed since the review. See the
   **Re-review** section at the end.
 
-Honour the mode the setup script reports. The only exception: if the user
-explicitly asks for a full review of an already-reviewed PR, run the full
-flow regardless.
+Honour the mode the setup script reports. To get a full review of a PR you
+already reviewed (a major rework, say), the user adds `full` to the
+arguments (`/prr full 1880`, `/prr full C=opus 1880`). Strip it like
+`silent` and pass `--full` to `setup-review.sh`, which then reports
+`MODE: full-review` and a `forced full:` line. A user who asks for a full
+review in words means the same: re-run setup with `--full`, never run the
+full flow under a `MODE: re-review` setup, because the mode file it writes
+labels the posted review. In a forced full review your own earlier inline
+comments are on the prior-comments list like anyone's: do not draft a
+duplicate of one that still applies, and do not "concur" with yourself;
+mention in the body which of them still stand.
 
 **Silent (stealth) reviews.** `silent` as the leading argument — `/prr silent
 1266`, mirroring `/prr test-mode` — suppresses every outbound Slack signal for
@@ -135,7 +143,8 @@ and carry on dual-source. Off unless asked for, every time: an outside model
 costs money per review and receives the diff. It composes with every other
 keyword and with all three modes except re-review, which runs no sources.
 `third` / `third=<model>` is an old spelling of the same keyword; treat it as
-`C`.
+`C`. Source C composes with `full`, so `/prr full C=opus <PR>` re-runs every
+pass on a reworked PR.
 
 **A self-review can turn Source C on by default.** When `setup-review.sh`
 reports `MODE: self-review`, it also prints a `source C:` line. If it says

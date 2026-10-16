@@ -41,6 +41,7 @@ pane_cmd() {
     if [[ "${PRR_FANOUT_SILENT:-0}" == "1" ]]; then silent="silent "; fi
     # Source C rides the same way (validated in prr-fanout.sh).
     if [[ -n "${PRR_FANOUT_SOURCE_C:-}" ]]; then source_c="${PRR_FANOUT_SOURCE_C} "; fi
+    if [[ "${PRR_FANOUT_FULL:-0}" == "1" ]]; then source_c="full ${source_c}"; fi
     # PRR_FANOUT_COMMAND (validated in prr-fanout.sh) lets a skill layered on
     # prr reuse the fan-out with its own slash command.
     printf 'PRR_FANOUT_PANE=1 claude "%s %s%s%s"' "$cmd" "$silent" "$source_c" "$ref"
