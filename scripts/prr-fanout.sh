@@ -67,22 +67,22 @@ fi
 #                    reaches prnum() as a bogus PR ref, and merely dropped it
 #                    would announce every review in chat, which is the one thing
 #                    a stealth batch exists to prevent.
-#   third|third=<model>  the opt-in Source C, from `/prr third <PR> <PR>`; rides
-#                    to the panes as PRR_FANOUT_THIRD for the same reason. The
+#   C|C=<model>      the opt-in Source C, from `/prr C <PR> <PR>`; rides to the
+#                    panes as PRR_FANOUT_SOURCE_C for the same reason. The
 #                    model lands in a quoted pane command, so it must be plain
-#                    (letters, digits and . _ : / -).
+#                    (letters, digits and . _ : / -). `third` is an old alias.
 TEST=0
 SILENT=0
-THIRD=""
+SOURCE_C=""
 while :; do
   case "${1:-}" in
     test-mode)       TEST=1;   shift ;;
     silent|--silent) SILENT=1; shift ;;
-    third)           THIRD="third"; shift ;;
-    third=*)
-      [[ "${1#third=}" =~ ^[A-Za-z0-9._:/-]+$ ]] \
+    C|third)         SOURCE_C="C"; shift ;;
+    C=*|third=*)
+      [[ "${1#*=}" =~ ^[A-Za-z0-9._:/-]+$ ]] \
         || { echo "prr-fanout: bad Source C model in '$1'" >&2; exit 2; }
-      THIRD="$1"; shift ;;
+      SOURCE_C="C=${1#*=}"; shift ;;
     *) break ;;
   esac
 done
@@ -127,7 +127,7 @@ export PRR_FANOUT="$backend"
 # its pane command through the shared pane_cmd, so exporting it here means all
 # three stay untouched.
 export PRR_FANOUT_SILENT="$SILENT"
-export PRR_FANOUT_THIRD="$THIRD"
+export PRR_FANOUT_SOURCE_C="$SOURCE_C"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="$here/prr-fanout-$backend.sh"
 [[ -x "$target" ]] || { echo "prr-fanout: backend script not found: $target" >&2; exit 3; }

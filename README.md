@@ -80,7 +80,7 @@ and is harmless to ignore in Cursor.)
 
 During a review Claude Code asks you to approve the helper-script runs
 (`setup-review.sh`, `post-review.sh`, `source-b-clock.sh` for the bounded
-security-agent wait, `source-c.sh` for the opt-in third pass, and
+security-agent wait, `source-c.sh` for the opt-in Source C, and
 `prr-fanout.sh` for the multi-PR fan-out) and the one
 file write of the review payload to
 `/tmp/pr-<N>-review.json`. To pre-approve just those (scoped to the prr
@@ -247,16 +247,32 @@ For calibration, agent runs on real PRs have landed between roughly 100 and
 except the wait itself; lowering it below about 300 makes single-source reviews
 routine, which defeats the point of having two passes.
 
-**Opt-in third pass: Source C** (`/prr third <PR>`, `PRR_SOURCE_C_MODEL`)
+**Opt-in Source C** (`/prr C <PR>`, `PRR_SOURCE_C_MODEL`)
 
-Sources A and B are the same model, so they share blind spots. `third` adds an
-independent general review (correctness, whether the tests would catch a
-break, what never runs, conventions) from a model you pick, per review:
+Source A reads the diff for correctness and Source B hunts security problems,
+so both look at the changed lines. Source C has a different job:
+what the change does to the system after it merges. Its brief walks eight
+lenses, and each must end in a finding or a note of what was checked:
+
+1. Claims in the PR body, commit messages, comments and docs, tested against
+   the code.
+2. Time: schedules, windows, TTLs, alarm periods, the first run after deploy.
+3. Rollout: deploy order, first deploy, backfills, rollback, what CI never
+   builds.
+4. Data shapes: empty, partial, duplicated, negative and malformed inputs,
+   and output that looks healthy when it is not.
+5. Consumers outside the diff.
+6. Tests: would each one fail if its production line were reverted?
+7. House rules (CLAUDE.md, AGENTS.md and the like) and helpers it duplicates.
+8. Platform behaviour the change assumes.
+
+It pays off most on a self-review, where Source A shares the author's
+assumptions. Pick the model per review:
 
 ```bash
-/prr third=sonnet 1880                    # a Claude model: a subagent, no extra cost
-/prr third=ollama/glm-5.3:cloud 1880      # anything else: through pi, read-only
-export PRR_SOURCE_C_MODEL=ollama/glm-5.3:cloud   # the model a bare `third` uses
+/prr C=sonnet 1880                        # a Claude model: a subagent, no extra cost
+/prr C=ollama/glm-5.3:cloud 1880          # anything else: through pi, read-only
+export PRR_SOURCE_C_MODEL=ollama/glm-5.3:cloud   # the model a bare `C` uses
 ```
 
 prr does not care where the report comes from: both paths use the same brief
@@ -299,7 +315,7 @@ money per review and receives the diff.
   none" when that is the answer), with the reason for each one dropped.
 - The posted review's `prr-meta` marker records `source_c`, the model, its
   seconds and the counts (`c_found`, `c_only`, `c_kept`, `c_only_kept`), so
-  whether `third` earns its cost can be read off posted reviews; older
+  whether Source C earns its cost can be read off posted reviews; older
   markers are unchanged.
 - From two trials on one PR (Ollama cloud, pay as you go, 2026-10-14):
   glm-5.3 cost $1.91 for a whole review and found one real point the Claude

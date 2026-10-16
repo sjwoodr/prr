@@ -11,8 +11,8 @@ description: >-
   back to the PR. `/prr silent <PR>` reviews stealthily: the approval gate and
   GitHub posting work as usual, but the team's chat channel gets no signal at
   all. `/prr bg <PR>` runs even one review in its own fan-out pane so this
-  session is not blocked. `/prr third <PR>` (or `third=<model>`) adds an
-  opt-in third pass from a model of your choice (a Claude model or one via
+  session is not blocked. `/prr C <PR>` (or `C=<model>`) adds the opt-in
+  Source C, a consequences pass, from a model of your choice (a Claude model or one via
   Ollama). Use when the user runs /prr, asks to review a pull request, or provides
   a PR URL or number to review.
 ---
@@ -33,7 +33,7 @@ The steps below explain each part; this is the order, and none is optional.
    `prior comments` lines, then the diff and the PR body in `/tmp/pr-<N>-view.json`.
 2. Start Source B in the background (step 2): your subagent tool, or
    `scripts/source-b.sh --bg <N>` in a harness without one. Skip it only when
-   every changed file is plain prose.* With `third` in the arguments, start
+   every changed file is plain prose.* With `C` in the arguments, start
    Source C the same way (step 2, "Source C").
 3. Source A, your own pass. A finding needs a line you opened in
    `/tmp/pr-<N>-wt` and can quote; a guess is not a finding.
@@ -125,15 +125,17 @@ reaction only ever takes a signal away. Without that, an ordinary review
 followed by a stealth re-review would strand "reviewing this" on the post for
 good.
 
-**Source C (opt-in third pass).** `third` or `third=<model>` anywhere in the
-arguments (`/prr third 1880`, `/prr silent third=sonnet 1880`) adds an
-independent general review from a model of the user's choosing, alongside
-Source B. Strip the keyword before going further, like `silent`. The model is
-`third=<model>` if given, else `$PRR_SOURCE_C_MODEL`; with neither, say once
+**Source C (opt-in).** `C` or `C=<model>` anywhere in the arguments
+(`/prr C 1880`, `/prr silent C=sonnet 1880`) adds a
+consequences pass (what the change does after it merges, outside the changed
+lines) from a model of the user's choosing, alongside Source B. Strip the keyword before going further, like `silent`. The model is
+`C=<model>` if given, else `$PRR_SOURCE_C_MODEL`; with neither, say once
 that Source C was asked for but has no model, record `source_c: "no-model"`,
 and carry on dual-source. Off unless asked for, every time: an outside model
 costs money per review and receives the diff. It composes with every other
 keyword and with all three modes except re-review, which runs no sources.
+`third` / `third=<model>` is an old spelling of the same keyword; treat it as
+`C`.
 
 ## Tooling
 
@@ -254,8 +256,8 @@ three checks:
   batch runs fine and each pane announces itself in chat, which is precisely
   what the user asked to avoid. `silent` and `test-mode` work in either order.
 
-  `third` / `third=<model>` passes through the same way and in any order with
-  `silent` (`prr-fanout.sh silent third=sonnet <PR> <PR>`); each pane then runs
+  `C` / `C=<model>` passes through the same way and in any order with
+  `silent` (`prr-fanout.sh silent C=sonnet <PR> <PR>`); each pane then runs
   Source C on its own review.
 
   The router resolves `PRR_FANOUT` (defaulting to `tmux` when unset) and opens one
@@ -635,14 +637,22 @@ If the block is missing or does not parse, do NOT re-run the agent: read the
 prose and verify more of it by hand. The contract speeds up synthesis, it is
 not a precondition for it.
 
-### Source C (opt-in): a third, independent pass
+### Source C (opt-in): the consequences pass
 
 Only when the arguments asked for it (see "Source C" near the top). prr does
 not care which model it is; only how it is launched depends on it. Its brief
 is `~/.claude/skills/prr/scripts/source-c-brief.md` with `{{N}}` replaced by
-the PR number: a general review (correctness, whether the tests would catch a
-break, what never runs, conventions), with the same output contract as Source
-B. It is not given the ticket, for the same reason as Source B.
+the PR number. Its job is what A and B leave out: what the change does to the
+system after it merges. It works through eight lenses (claims in the PR body,
+commits and docs checked against the code; time and schedules; rollout and
+first deploy; empty, partial and malformed data; consumers outside the diff;
+whether each test can fail; house rules and reuse; platform behaviour), with
+the same output contract as Source B and each title prefixed by its lens. It
+is not given the ticket, for the same reason as Source B.
+
+It earns most on a **self-review**: Source A shares the author's assumptions,
+and the PR body Source C attacks is the author's own. Suggest `C` there
+when the user did not ask for it, but do not start it unasked.
 
 Start its clock, then launch it right after Source B, before Source A:
 
@@ -834,7 +844,7 @@ Show the user:
   concurred list after verification. Name every finding only that source
   raised, kept or dropped, and give the reason for each one dropped. Write
   "only C: none" when that is the case: it is the line the user reads to
-  decide whether `third` is worth its cost, so it is never left out or
+  decide whether Source C is worth its cost, so it is never left out or
   folded into prose. Add the B line and the C line only for sources that ran;
   a failed or timed-out source gets its line with the outcome instead of
   counts.
