@@ -174,7 +174,7 @@ def selftest():
                 f.write(data if isinstance(data, str) else json.dumps(data))
         c1 = {"path": "a.ts", "line": 3, "side": "RIGHT", "body": "Fine nit."}
         c2 = {"path": "b.ts", "line": 9, "side": "RIGHT", "body": "Another."}
-        put("pr-7-view.json", {"title": "[IBX-1] Port tests", "body": "x",
+        put("pr-7-view.json", {"title": "[ABC-1] Port tests", "body": "x",
                                "files": [{"path": "src/a.ts"}]})
         put("pr-7-mode", "full-review\n")
         put("pr-7-draft.json", [c1, c2])
@@ -195,7 +195,7 @@ def selftest():
         fails({"comments": [{"path": "z.ts", "line": 1, "body": "New."}]}, "not among the drafts")
         fails({"source_b": "skipped-prose"}, "not all plain prose")
         fails({"source_b": "timeout"}, "never started")
-        fails({"ac": "no-ticket"}, "IBX-1")
+        fails({"ac": "no-ticket"}, "ABC-1")
         put("p.json", {k: v for k, v in good.items() if k != "source_b"})
         assert any("source_b missing" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
         # Source C is opt-in: absent is fine until it was started.

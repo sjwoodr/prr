@@ -165,7 +165,7 @@ fmt_k() { # 1500000->1.5M, 226000->226k, 3100->3.1k, 500->500
   else printf '%d' "$1"; fi
 }
 
-# The review line ("prr: reviewing #1861 - [IBX-3763] Title") is trimmed as
+# The review line ("prr: reviewing #123 - [ABC-456] Title") is trimmed as
 # plain text first, like the idle line, then coloured in parts: "prr: <verb>",
 # the PR number, a leading ticket key in the title; the title itself stays the
 # terminal's default colour. A line that does not have that shape (an older
