@@ -305,6 +305,14 @@ self-review context:
   pr author:       $pr_author (you)
   posting:         disabled — report findings to the user only, post nothing
 EOF
+  # Source C is on by default for a self-review: the author's own assumptions
+  # and PR description are what it attacks. PRR_SELF_REVIEW_C names the model,
+  # or `off` to keep it opt-in here too.
+  self_c="${PRR_SELF_REVIEW_C:-opus}"
+  case "$self_c" in
+    off|none|false|0) echo "  source C:        opt-in (PRR_SELF_REVIEW_C=$self_c)" ;;
+    *)                echo "  source C:        on by default, model $self_c (noC to skip)" ;;
+  esac
 fi
 
 # Two different reasons to send the team no Slack signal, and they turn out to

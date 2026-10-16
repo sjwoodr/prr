@@ -267,7 +267,11 @@ lenses, and each must end in a finding or a note of what was checked:
 8. Platform behaviour the change assumes.
 
 It pays off most on a self-review, where Source A shares the author's
-assumptions. Pick the model per review:
+assumptions, so **a self-review runs it by default** with `opus`. Set
+`PRR_SELF_REVIEW_C` to another model, or to `off` to keep it opt-in there too
+(do that in a harness with no Claude subagents, where `opus` cannot run). Add
+`noC` to skip it for one run. On anyone else's PR it stays opt-in. Pick the
+model per review:
 
 ```bash
 /prr C=sonnet 1880                        # a Claude model: a subagent, no extra cost

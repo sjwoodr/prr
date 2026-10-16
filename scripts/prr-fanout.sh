@@ -70,7 +70,8 @@ fi
 #   C|C=<model>      the opt-in Source C, from `/prr C <PR> <PR>`; rides to the
 #                    panes as PRR_FANOUT_SOURCE_C for the same reason. The
 #                    model lands in a quoted pane command, so it must be plain
-#                    (letters, digits and . _ : / -). `third` is an old alias.
+#                    (letters, digits and . _ : / -). `third` is an old alias; `noC`
+#                    skips the Source C a self-review runs by default.
 TEST=0
 SILENT=0
 SOURCE_C=""
@@ -79,6 +80,7 @@ while :; do
     test-mode)       TEST=1;   shift ;;
     silent|--silent) SILENT=1; shift ;;
     C|third)         SOURCE_C="C"; shift ;;
+    noC)             SOURCE_C="noC"; shift ;;
     C=*|third=*)
       [[ "${1#*=}" =~ ^[A-Za-z0-9._:/-]+$ ]] \
         || { echo "prr-fanout: bad Source C model in '$1'" >&2; exit 2; }
