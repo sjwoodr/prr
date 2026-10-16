@@ -305,13 +305,13 @@ self-review context:
   pr author:       $pr_author (you)
   posting:         disabled — report findings to the user only, post nothing
 EOF
-  # Source C is on by default for a self-review: the author's own assumptions
-  # and PR description are what it attacks. PRR_SELF_REVIEW_C names the model,
-  # or `off` to keep it opt-in here too.
-  self_c="${PRR_SELF_REVIEW_C:-opus}"
+  # PRR_SELF_REVIEW_C=<model> runs Source C on every self-review, where the
+  # author's own assumptions and PR description are what it attacks. Unset, it
+  # stays opt-in: a third pass costs about as much as Source B.
+  self_c="${PRR_SELF_REVIEW_C:-}"
   case "$self_c" in
-    off|none|false|0) echo "  source C:        opt-in (PRR_SELF_REVIEW_C=$self_c)" ;;
-    *)                echo "  source C:        on by default, model $self_c (noC to skip)" ;;
+    ""|off|none|false|0) echo "  source C:        opt-in (set PRR_SELF_REVIEW_C=<model> to run it on every self-review)" ;;
+    *)                   echo "  source C:        on by default, model $self_c (noC to skip)" ;;
   esac
 fi
 

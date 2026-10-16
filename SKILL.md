@@ -137,13 +137,13 @@ keyword and with all three modes except re-review, which runs no sources.
 `third` / `third=<model>` is an old spelling of the same keyword; treat it as
 `C`.
 
-**Self-review turns Source C on by default.** When `setup-review.sh` reports
-`MODE: self-review`, it also prints a `source C:` line. If it says
-`on by default, model <m>`, run Source C with model `<m>` exactly as if the
-user had typed `C=<m>`, unless the arguments contain `noC` (strip it like any
-keyword) or an explicit `C=<model>`, which wins. If it says `opt-in`, the
-user turned the default off with `PRR_SELF_REVIEW_C=off`; treat `C` as usual.
-Every other mode keeps Source C opt-in.
+**A self-review can turn Source C on by default.** When `setup-review.sh`
+reports `MODE: self-review`, it also prints a `source C:` line. If it says
+`on by default, model <m>` (the user set `PRR_SELF_REVIEW_C=<m>`), run Source
+C with model `<m>` exactly as if the user had typed `C=<m>`, unless the
+arguments contain `noC` (strip it like any keyword) or an explicit
+`C=<model>`, which wins. If it says `opt-in`, treat `C` as usual. Every other
+mode keeps Source C opt-in.
 
 ## Tooling
 
@@ -659,9 +659,9 @@ the same output contract as Source B and each title prefixed by its lens. It
 is not given the ticket, for the same reason as Source B.
 
 It earns most on a **self-review**: Source A shares the author's assumptions,
-and the PR body Source C attacks is the author's own. That is why a
-self-review runs it by default (see "Self-review turns Source C on by
-default" near the top).
+and the PR body Source C attacks is the author's own. That is why
+`PRR_SELF_REVIEW_C` can make a self-review run it by default (see "A
+self-review can turn Source C on by default" near the top).
 
 Start its clock, then launch it right after Source B, before Source A:
 
