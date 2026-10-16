@@ -1036,6 +1036,19 @@ prr-local/
   ```
 
   They are hidden only from rendering; anyone reading the raw body sees them.
+- **A local run log** covers what GitHub never sees: a self-review, a declined
+  gate, a `PRR_POST=off` trial. Every run that went through setup appends one
+  JSON line to `~/.local/state/prr/runs.jsonl` (under `$XDG_STATE_HOME` when
+  set): the PR, the mode, the outcome (`posted`, `not-posted`, `blocked`),
+  which sources started and finished, `sources` (1 to 3, or 0 for a re-review,
+  which runs none), and seconds per pass. It is read from the clock stamps,
+  just before cleanup removes them. Set `PRR_RUN_LOG` to another path, or to
+  `off`. It is local to the machine: reviews run on another computer are in
+  that computer's log.
+
+  ```bash
+  jq -r '"\(.mode) \(.sources)"' ~/.local/state/prr/runs.jsonl | sort | uniq -c
+  ```
 
 ## Author and license
 

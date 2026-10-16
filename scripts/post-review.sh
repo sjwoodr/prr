@@ -107,6 +107,43 @@ write_fanout_result() {
     "$number" "$1" "${2:-none}" "${3:-0}" > "/tmp/prr-fanout-${number}.result"
 }
 
+# One JSON line per run in a local log, written from the stamps before cleanup
+# deletes them: which sources started and finished, and seconds per pass. It is
+# the only record a self-review or a declined gate leaves, since neither posts.
+# Best-effort, and never written for a PR that setup never touched.
+# PRR_RUN_LOG overrides the path; PRR_RUN_LOG=off turns it off.
+log_run() {
+  local log="${PRR_RUN_LOG:-${XDG_STATE_HOME:-$HOME/.local/state}/prr/runs.jsonl}"
+  [[ "$log" == "off" ]] && return 0
+  local t; t="$(cat "/tmp/pr-${number}-started" 2>/dev/null || true)"
+  [[ "$t" =~ ^[0-9]+$ ]] || return 0
+  {
+    mkdir -p "$(dirname "$log")"
+    local st n=$(date +%s)
+    st() { local v; v="$(cat "/tmp/pr-${number}-$1" 2>/dev/null || true)"; [[ "$v" =~ ^[0-9]+$ ]] && echo "$v" || echo ""; }
+    jq -nc \
+      --arg repo "$repo" --argjson number "$number" \
+      --arg mode "$(cat "/tmp/pr-${number}-mode" 2>/dev/null || echo unknown)" \
+      --arg outcome "$1" --arg event "${2:-}" --arg silent "$silent" \
+      --arg t0 "$t" --arg now "$n" \
+      --arg a "$(st a-done)" \
+      --arg bs "$(st sourceb-started)" --arg bd "$(st b-done)" \
+      --arg cs "$(st sourcec-started)" --arg cd "$(st c-done)" '
+      def num: if . == "" then null else tonumber end;
+      def dur(a; b): if (a | num) == null or (b | num) == null then null else (b | num) - (a | num) end;
+      {at: ($now | num | todate), repo: $repo, number: $number, mode: $mode,
+       outcome: $outcome, event: (if $event == "" then null else $event end),
+       silent: ($silent == "1"),
+       b: {started: ($bs != ""), done: ($bd != "")},
+       c: {started: ($cs != ""), done: ($cd != "")},
+       sources: (if $mode == "re-review" then 0
+                 else 1 + (if $bd != "" then 1 else 0 end) + (if $cd != "" then 1 else 0 end) end),
+       a_s: dur($t0; $a), b_s: dur($bs; $bd), c_s: dur($cs; $cd), total_s: dur($t0; $now)}
+      ' >> "$log"
+  } 2>/dev/null || echo "prr: could not write the run log $log" >&2
+  return 0
+}
+
 cleanup() {
   # Local-worktree mode registers $wt as a git worktree; standalone mode leaves
   # a throwaway repo directory. Handle both, and tolerate being run from outside
@@ -228,6 +265,7 @@ cleanup() {
 if [[ -z "$payload" ]]; then
   echo "cleanup-only: no payload given, not posting a review"
   clear_eyes
+  log_run not-posted
   cleanup
   write_fanout_result not-posted
   exit 0
@@ -256,6 +294,7 @@ case "$(printf '%s' "${PRR_POST:-on}" | tr '[:upper:]' '[:lower:]')" in
     cp "$payload" "$blocked"
     echo "PRR_POST=off: not posting. The review that would have been posted is in $blocked"
     clear_eyes
+    log_run blocked
     cleanup
     write_fanout_result not-posted
     exit 3
@@ -466,6 +505,7 @@ else
   fi
 fi
 
+log_run posted "$event"
 cleanup
 
 write_fanout_result posted "$event" "$ncomments"
