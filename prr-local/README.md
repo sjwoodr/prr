@@ -20,3 +20,21 @@ model (pi, via a `~/.agents/skills` link) loads it instead of prr, whose
 procedure is far too long for a local context window. Claude Code also sees it,
 through the `~/.claude/skills/prr-local` link; its description keeps Claude
 models from choosing it over prr.
+
+## Flag and timing notes
+
+- `--think-budget 400` lets the model reason for up to 400 tokens per file,
+  about 17 s more per file. A model without thinking support in Ollama's
+  capabilities (e.g. `qwen3-coder`) skips it with a note.
+- Default model `gemma4-26b-a4b-32k:latest`; override with `--model` or
+  `$PRR_LOCAL_MODEL`.
+- Expect seconds to a minute per file, plus about 15 s if the model has to load.
+
+## How the pipeline works
+
+It splits the diff per file, asks the local model about one file at a time
+under a JSON schema, validates every line anchor against the diff, and derives
+the verdict from the findings. Every call also gets a one-line-per-file overview
+of the whole PR. Deleted files are reviewed as context: their findings have no
+line, so they go in the review body under "On deleted files". Having the model
+read the whole PR itself costs more and produces worse anchors.

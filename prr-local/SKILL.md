@@ -10,15 +10,8 @@ description: Review a GitHub pull request with the local Ollama model, as a sing
 A single-source review of a pull request by a local model, sharing prr's setup
 and posting scripts.
 
-The review runs as a deterministic pipeline, not as a procedure you follow: it
-splits the diff per file, asks the local model about one file at a time under a
-JSON schema, validates every line anchor against the diff, and derives the
-verdict from the findings. Every call also gets a one-line-per-file overview of
-the whole PR. Deleted files are reviewed as context: their findings have no line,
-so they go in the review body under "On deleted files" instead of inline.
-
-**Do not review the diff yourself.** Reading a whole PR through a local model
-costs more than the pipeline does and produces worse anchors. Run the script.
+The review is a script, not a procedure you follow. **Do not review the diff
+yourself.** Run the script below.
 
 ## Review
 
@@ -26,20 +19,14 @@ costs more than the pipeline does and produces worse anchors. Run the script.
 python3 ~/.claude/skills/prr/scripts/prr-local.py <PR-url-or-number> --save-only --think-budget 400
 ```
 
-`--think-budget 400` is the default here: the model reasons for up to 400 tokens
-per file before its findings (up to ~17 s more per file). If the user names a
-different budget, use theirs; leave the flag out only if they ask for no
-thinking. A model without thinking support (Ollama's capabilities, e.g.
-`qwen3-coder`) skips it on its own, with a note. Never use plain `--think`: it is uncapped and can run for many
-minutes on one file. Add `--silent` to suppress chat signals. Progress goes to
-`/tmp/prr-local-<N>.log`. The default model is
-`gemma4-26b-a4b-32k:latest` (override with `--model` or `$PRR_LOCAL_MODEL`).
-An Ollama cloud model (`gpt-oss:120b-cloud`) also works, but it sends the diff
-off the machine: use one only when the user names it.
-It makes one call per changed file, so time scales with the file count: expect
-seconds to a minute per file, plus ~15 s if the model has to load first. Stream
-the output rather than buffering it, and do not start a second heavy request
-alongside it.
+- Keep `--think-budget 400` unless the user names another budget; drop it only
+  if they ask for no thinking. Never use plain `--think` (uncapped).
+- Add `--silent` if the user asks for no chat signals.
+- Use an Ollama cloud model (`--model gpt-oss:120b-cloud`) only when the user
+  names one: it sends the diff off the machine.
+- It makes one call per changed file, so it can take minutes. Stream the
+  output, and start no other heavy request alongside it. Progress is in
+  `/tmp/prr-local-<N>.log`.
 
 Read the `reviewing N file(s)` line first. A PR you already reviewed with no
 commits since runs in re-review mode against an empty diff, reviews zero files,
