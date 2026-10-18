@@ -133,6 +133,12 @@ reaction only ever takes a signal away. Without that, an ordinary review
 followed by a stealth re-review would strand "reviewing this" on the post for
 good.
 
+**No `:eyes:` only.** `noeyes` anywhere in the arguments (`/prr noeyes 1880`)
+skips just the `:eyes:` at start; strip it like `silent` and pass `--noeyes`
+to `setup-review.sh`. Everything else is a normal review: if the review posts,
+the outcome reaction and thread reply go out as usual. It is for reviews
+started unattended, which can wait at the gate for hours.
+
 **Source C (opt-in).** `C` or `C=<model>` anywhere in the arguments
 (`/prr C 1880`, `/prr silent C=sonnet 1880`) adds a
 consequences pass (what the change does after it merges, outside the changed

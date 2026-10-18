@@ -4,13 +4,17 @@
 # a full review, a self-review of your own PR (full pass, report-only), or
 # a re-review of a PR you already reviewed.
 #
-# Usage:  setup-review.sh [--silent] [--full] <PR-url-or-number> [owner/repo]
+# Usage:  setup-review.sh [--silent] [--noeyes] [--full] <PR-url-or-number> [owner/repo]
 #         setup-review.sh --threads <PR-url-or-number> [owner/repo]
 # A full PR URL works from any directory; a bare PR number must be run from
 # inside the PR's git repo.
 #
 # --silent is stealth mode: suppress every Slack signal for this review, so
 # nothing on the team's chat post says it is happening or how it ended.
+#
+# --noeyes skips only the :eyes: at start. The outcome reaction and thread
+# reply still post if the review does. For a review started unattended, which
+# may sit at the approval gate for hours, so :eyes: would claim someone is on it.
 #
 # --threads touches nothing but the comment artifact: it re-reads the PR's
 # inline comments and reviews, rewrites /tmp/pr-<N>-comments.json, and lists
@@ -26,12 +30,14 @@ set -euo pipefail
 # accepted alongside `--silent` because the skill's own front-door form reads
 # `/prr silent <PR>`, mirroring `/prr test-mode <PR>`.
 silent=0
+noeyes=0
 threads=0
 force_full=0
 _args=()
 for _a in "$@"; do
   case "$_a" in
     --silent|silent) silent=1 ;;
+    --noeyes|noeyes) noeyes=1 ;;
     --threads) threads=1 ;;
     # A full review even when you already reviewed this PR (a major rework).
     --full|full) force_full=1 ;;
@@ -353,7 +359,9 @@ fi
 # started. No-op unless SLACK_BOT_TOKEN and PRR_CODE_REVIEWS_CHANNEL are set.
 # Removed again by post-review.sh once the review is posted or cleaned up.
 # Best-effort: never let it abort setup.
-if ((!slack_quiet)); then
+if ((noeyes && !slack_quiet)); then
+  echo "slack: noeyes - no :eyes: on the chat post; the outcome reaction and reply still post"
+elif ((!slack_quiet)); then
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   python3 "$script_dir/slack_react.py" \
     --repo "$repo" --number "$number" --react eyes || true
