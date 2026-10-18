@@ -1031,7 +1031,9 @@ containing:
   "footgun"). The field is stripped from the body before the review is
   posted to GitHub; it only feeds Slack. If the chat integration is not
   configured, the post script prints it for the user to post by hand
-  instead, so it is still worth writing well.
+  instead, so it is still worth writing well. If the PR is still a draft
+  when the review posts, the script puts "I know this is still a draft, but
+  I took a look." in front of it, so do not mention the draft yourself.
 
   **Address the author in the second person.** The reply lands in the thread
   under the author's own PR post, so you are talking *to* them, not *about*

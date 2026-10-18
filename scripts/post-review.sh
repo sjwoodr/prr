@@ -404,8 +404,13 @@ ncomments="$(jq '.comments | length' "$marked")"
 #
 # Fail-open if the head cannot be resolved (network blip): GitHub's own 422
 # below is the backstop, and it no longer retries.
+#
+# The same call reads the draft flag, so the chat reply can say the PR was
+# reviewed as a draft. Unknown counts as not a draft.
 payload_sha="$(jq -r '.commit_id // empty' "$marked")"
-live_sha="$(gh pr view "$number" --repo "$repo" --json headRefOid -q .headRefOid 2>/dev/null || true)"
+live_state="$(gh pr view "$number" --repo "$repo" --json headRefOid,isDraft -q '"\(.headRefOid) \(.isDraft)"' 2>/dev/null || true)"
+live_sha="${live_state%% *}"
+is_draft="${live_state##* }"
 if [[ -n "$live_sha" && -n "$payload_sha" && "$live_sha" != "$payload_sha" ]]; then
   echo "error: the PR head moved after this review was prepared; refusing to post." >&2
   echo "         reviewed: $payload_sha" >&2
@@ -484,6 +489,9 @@ else
     APPROVE) react_emoji="white_check_mark" ;;
     *)       react_emoji="speech_balloon" ;;
   esac
+  if [[ "$is_draft" == "true" ]]; then
+    slack_summary="I know this is still a draft, but I took a look.${slack_summary:+ $slack_summary}"
+  fi
   slack_rc=0
   python3 "$script_dir/slack_react.py" \
     --repo "$repo" --number "$number" \
