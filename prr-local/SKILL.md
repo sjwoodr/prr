@@ -7,21 +7,8 @@ description: Review a GitHub pull request with the local Ollama model, as a sing
 
 **When invoked, run the review command below on the given PR right away; ask for the PR only if none was given.**
 
-> **Status (2026-09-30): no local model tested so far is accurate enough to
-> trust.** Tried: `qwen3:8b`, `qwen2.5-coder:7b` and `gemma4:26b-a4b-it-qat`.
-> Across three PRs with known-good answers, not one finding survived checking.
-> The misses were judgement, not speed or anchoring: findings that re-raise
-> problems the author's own comments already handle, or fixes that would break
-> the code. Capped thinking (`--think-budget`) cut the noise but kept a
-> confident, wrong blocker. Treat the output as a reading aid, and verify every finding before
-> posting. This skill is kept so the next model can be tried without rebuilding
-> it.
-
 A single-source review of a pull request by a local model, sharing prr's setup
-and posting scripts. It lives inside the prr skill directory on purpose: Claude
-Code only discovers top-level skills, so it sees prr and not this; an agent
-harness running a local model (pi, via a ~/.agents/skills link) sees it and does
-not load prr, whose procedure is far too long for a local context window.
+and posting scripts.
 
 The review runs as a deterministic pipeline, not as a procedure you follow: it
 splits the diff per file, asks the local model about one file at a time under a
