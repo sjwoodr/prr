@@ -490,7 +490,14 @@ else
     *)       react_emoji="speech_balloon" ;;
   esac
   if [[ "$is_draft" == "true" ]]; then
-    slack_summary="I know this is still a draft, but I took a look.${slack_summary:+ $slack_summary}"
+    # The summary usually opens with its own "Took a look,"; drop it so the
+    # draft note does not say it twice.
+    shopt -s nocasematch
+    if [[ "$slack_summary" =~ ^(took a look|had a look|reviewed it|looked it over)[,.]?( and)?[[:space:]]* ]]; then
+      slack_summary="${slack_summary:${#BASH_REMATCH[0]}}"
+    fi
+    shopt -u nocasematch
+    slack_summary="I know this is still a draft, but I took a look.${slack_summary:+ ${slack_summary^}}"
   fi
   slack_rc=0
   python3 "$script_dir/slack_react.py" \
