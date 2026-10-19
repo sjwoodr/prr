@@ -1135,6 +1135,10 @@ chat channel, prr signals review progress on that post across the run:
   but the chat post gets no outcome reaction and no thread reply. The `:eyes:`
   unreact still runs, because removing a reaction only takes a signal away and
   an earlier ordinary review of the same PR may have left one pinned there.
+- **A post listing several PRs** (one message announcing a batch) -> every
+  review in it shares that post, so no `:eyes:` or outcome reaction is added
+  there. The thread reply is prefixed with the PR's own line from the post
+  (`WID-10 Card reminders (#1915): ...`) so each one says which PR it is about.
 
 The reactions are standard Slack emoji (no custom upload needed). This is fully
 opt-in and a no-op unless both environment variables are set:

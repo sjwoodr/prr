@@ -18,6 +18,10 @@ All three are independent operations on the same found post, selected by flag:
 Multiple flags may be combined in one call; they run in order unreact -> react
 -> reply against the single post the helper locates.
 
+A post that links several PRs (one message announcing a batch) is shared by
+every review in it, so no reaction is added there, and the reply is prefixed
+with the PR's own line from the post, e.g. "WID-10 Card reminders (#1915): ...".
+
 This step is entirely OPT-IN via environment variables and is a no-op unless both
 are set:
   SLACK_BOT_TOKEN          a Slack user OAuth token (xoxp-...; the env var keeps
@@ -65,9 +69,14 @@ def _api(method, token, params=None, post=False):
         return json.load(resp)
 
 
-def _find_post_ts(token, channel, repo, number):
-    # Match the PR url path, repo-qualified, number not followed by another digit.
-    pat = re.compile(rf"/{re.escape(repo)}/pull/{number}(?!\d)")
+def _pr_pattern(repo, number):
+    # The PR url path, repo-qualified, number not followed by another digit.
+    return re.compile(rf"/{re.escape(repo)}/pull/{number}(?!\d)")
+
+
+def _find_post(token, channel, repo, number):
+    """Return (ts, text, error) of the newest message linking the PR."""
+    pat = _pr_pattern(repo, number)
     cursor = None
     for _ in range(MAX_PAGES):
         params = {"channel": channel, "limit": 200}
@@ -75,14 +84,37 @@ def _find_post_ts(token, channel, repo, number):
             params["cursor"] = cursor
         r = _api("conversations.history", token, params)
         if not r.get("ok"):
-            return None, r.get("error", "unknown")
+            return None, None, r.get("error", "unknown")
         for m in r.get("messages", []):
             if pat.search(m.get("text", "")):
-                return m["ts"], None
+                return m["ts"], m.get("text", ""), None
         cursor = r.get("response_metadata", {}).get("next_cursor")
         if not cursor:
             break
-    return None, "post not found"
+    return None, None, "post not found"
+
+
+def _pr_count(text):
+    """Distinct GitHub PRs a message links."""
+    return len(set(re.findall(r"github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)", text)))
+
+
+def _label(text, repo, number):
+    """The PR's own line in a post that lists several, minus the link.
+
+    "WID-10 Card reminder claims - <https://.../pull/1915>" becomes
+    "WID-10 Card reminder claims (#1915)". Falls back to "#1915".
+    """
+    pat = _pr_pattern(repo, number)
+    line = next((l for l in text.splitlines() if pat.search(l)), "")
+    # Drop the PR link itself (Slack wraps it as <url> or <url|label>), then
+    # unwrap any other links to their visible text.
+    line = re.sub(r"<[^>|]*" + pat.pattern + r"[^>]*>", "", line)
+    line = re.sub(r"https?://\S*" + pat.pattern + r"\S*", "", line)
+    line = re.sub(r"<[^>|]*\|([^>]*)>", r"\1", line)
+    line = re.sub(r"<([^>]*)>", r"\1", line)
+    line = line.strip(" \t-:|–—")
+    return f"{line} (#{number})" if line else f"#{number}"
 
 
 def _do_unreact(token, channel, ts, emoji):
@@ -143,17 +175,29 @@ def main():
     if not (react or args.unreact or args.reply):
         return 0  # nothing asked of us
 
-    ts, err = _find_post_ts(token, args.channel, args.repo, args.number)
+    ts, text, err = _find_post(token, args.channel, args.repo, args.number)
     if not ts:
         print(f"slack: PR chat post not found ({err}); skipping reactions/reply")
         return NOT_POSTED if args.reply else 0
+
+    # A post listing several PRs is shared by all their reviews. One reaction
+    # cannot say which PR it is about, and the first review to finish would
+    # clear everyone's :eyes:, so add none there and name the PR in the reply.
+    # Removing still runs: it only ever clears a stale marker.
+    reply = args.reply
+    if _pr_count(text) > 1:
+        if react:
+            print(f"slack: post lists several PRs (ts {ts}); no :{react}:, the reply names the PR")
+            react = None
+        if reply:
+            reply = f"{_label(text, args.repo, args.number)}: {reply}"
 
     # Order matters: clear the in-progress marker, set the outcome, then reply.
     if args.unreact:
         _do_unreact(token, args.channel, ts, args.unreact)
     if react:
         _do_react(token, args.channel, ts, react)
-    if args.reply and not _do_reply(token, args.channel, ts, args.reply):
+    if reply and not _do_reply(token, args.channel, ts, reply):
         return NOT_POSTED
     return 0
 
