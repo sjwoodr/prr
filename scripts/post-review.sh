@@ -125,6 +125,7 @@ log_run() {
       --arg repo "$repo" --argjson number "$number" \
       --arg mode "$(cat "/tmp/pr-${number}-mode" 2>/dev/null || echo unknown)" \
       --arg outcome "$1" --arg event "${2:-}" --arg silent "$silent" \
+      --arg trigger "$(t="${PRR_TRIGGER:-}"; [[ "$t" =~ ^[a-z0-9-]{1,32}$ ]] && echo "$t")" \
       --arg t0 "$t" --arg now "$n" \
       --arg a "$(st a-done)" \
       --arg bs "$(st sourceb-started)" --arg bd "$(st b-done)" \
@@ -133,7 +134,7 @@ log_run() {
       def dur(a; b): if (a | num) == null or (b | num) == null then null else (b | num) - (a | num) end;
       {at: ($now | num | todate), repo: $repo, number: $number, mode: $mode,
        outcome: $outcome, event: (if $event == "" then null else $event end),
-       silent: ($silent == "1"),
+       silent: ($silent == "1"), trigger: (if $trigger == "" then null else $trigger end),
        b: {started: ($bs != ""), done: ($bd != "")},
        c: {started: ($cs != ""), done: ($cd != "")},
        sources: (if $mode == "re-review" then 0
@@ -345,6 +346,10 @@ if [[ -n "$source_c" ]]; then
 fi
 t0="$(stamp started)"
 fanout=0; [[ -n "${PRR_FANOUT_PANE:-}" ]] && fanout=1
+# Optional PRR_TRIGGER names what started the review when it was not a person
+# typing /prr (e.g. "watch" for a scheduled watcher), so stats can count those
+# apart. Restricted to [a-z0-9-] because it lands in a hidden comment.
+trigger="${PRR_TRIGGER:-}"; [[ "$trigger" =~ ^[a-z0-9-]{1,32}$ ]] || trigger=""
 # The payload's optional `prior` (re-review: status of each earlier finding)
 # and `ac` (ticket acceptance criteria) become counts, never text: the line
 # is hidden only from rendering. ac is no-ticket, no-criteria or unread when
@@ -375,7 +380,7 @@ if [[ "$(git -C "$prr_root" rev-parse --show-toplevel 2>/dev/null)" == "$prr_roo
     version="${version}+"
   fi
 fi
-meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
+meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
 
 # Thread replies (payload `replies`: [{in_reply_to, body}]) are posted after
 # the review, in the existing threads; they are never part of the review.

@@ -1046,6 +1046,11 @@ prr-local/
   `off`. It is local to the machine: reviews run on another computer are in
   that computer's log.
 
+  A review started by a tool rather than a person can say so: set
+  `PRR_TRIGGER` (lowercase letters, digits and `-`, e.g. `watch` for a
+  scheduled watcher) and it is recorded as `trigger=` in the `prr-meta` line
+  and `trigger` in the run log, so stats can count those reviews apart.
+
   ```bash
   jq -r '"\(.mode) \(.sources)"' ~/.local/state/prr/runs.jsonl | sort | uniq -c
   ```
