@@ -139,6 +139,14 @@ to `setup-review.sh`. Everything else is a normal review: if the review posts,
 the outcome reaction and thread reply go out as usual. It is for reviews
 started unattended, which can wait at the gate for hours.
 
+**Merge conflicts.** `setup-review.sh` refuses a PR that GitHub reports as
+conflicting with its base branch, before it creates anything: it prints why
+and exits 4. Resolving the conflicts changes the code, so a review now would
+be redone on the re-review after the fix. Report that in one line and end the
+run there: no Source B, no gate, and no `post-review.sh` (there is nothing to
+clean up). `conflicts` anywhere in the arguments (`/prr conflicts 1880`)
+reviews it anyway; strip it like `silent` and pass `--allow-conflicts`.
+
 **Source C (opt-in).** `C` or `C=<model>` anywhere in the arguments
 (`/prr C 1880`, `/prr silent C=sonnet 1880`) adds a
 consequences pass (what the change does after it merges, outside the changed
@@ -326,6 +334,8 @@ re-review mode it additionally writes `pr-<N>-prior-review.json` and
 `pr-<N>-since-diff.txt`.
 
 Then:
+- If it exited 4 with "has merge conflicts", stop as **Merge conflicts**
+  (near the top) says.
 - Read the `MODE:` line. If `MODE: re-review`, skip steps 2-6 and jump to
   the **Re-review** section. If `MODE: full-review`, continue below. If
   `MODE: self-review`, also continue below (it runs as a full review), but

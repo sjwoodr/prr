@@ -4,7 +4,7 @@
 # a full review, a self-review of your own PR (full pass, report-only), or
 # a re-review of a PR you already reviewed.
 #
-# Usage:  setup-review.sh [--silent] [--noeyes] [--full] <PR-url-or-number> [owner/repo]
+# Usage:  setup-review.sh [--silent] [--noeyes] [--full] [--allow-conflicts] <PR-url-or-number> [owner/repo]
 #         setup-review.sh --threads <PR-url-or-number> [owner/repo]
 # A full PR URL works from any directory; a bare PR number must be run from
 # inside the PR's git repo.
@@ -15,6 +15,10 @@
 # --noeyes skips only the :eyes: at start. The outcome reaction and thread
 # reply still post if the review does. For a review started unattended, which
 # may sit at the approval gate for hours, so :eyes: would claim someone is on it.
+#
+# A PR with merge conflicts is refused (exit 4) before anything is created:
+# resolving them changes the code, so a review now would be spent again on the
+# re-review after the fix. --allow-conflicts (or `conflicts`) reviews it anyway.
 #
 # --threads touches nothing but the comment artifact: it re-reads the PR's
 # inline comments and reviews, rewrites /tmp/pr-<N>-comments.json, and lists
@@ -33,6 +37,7 @@ silent=0
 noeyes=0
 threads=0
 force_full=0
+allow_conflicts=0
 _args=()
 for _a in "$@"; do
   case "$_a" in
@@ -41,6 +46,7 @@ for _a in "$@"; do
     --threads) threads=1 ;;
     # A full review even when you already reviewed this PR (a major rework).
     --full|full) force_full=1 ;;
+    --allow-conflicts|conflicts) allow_conflicts=1 ;;
     *) _args+=("$_a") ;;
   esac
 done
@@ -109,6 +115,27 @@ if ((threads)); then
     echo "  nothing new from anyone else"
   fi
   exit 0
+fi
+
+# Refuse a PR with merge conflicts before touching anything (no worktree, no
+# :eyes:, nothing to clean up). GitHub computes mergeability lazily and says
+# UNKNOWN until it has, so ask a few times; still UNKNOWN means review it.
+if ((!allow_conflicts)); then
+  mergeable=UNKNOWN
+  for _ in 1 2 3 4 5; do
+    mergeable="$(gh pr view "$number" --repo "$repo" --json mergeable --jq .mergeable 2>/dev/null || echo UNKNOWN)"
+    [[ "$mergeable" == UNKNOWN ]] || break
+    sleep 2
+  done
+  if [[ "$mergeable" == CONFLICTING ]]; then
+    echo "prr: #${number} has merge conflicts with its base branch; not reviewing it until they are resolved."
+    echo "     Resolving them changes the code, so this review would be redone. To review it anyway: conflicts"
+    # In a review-watch pane, the result file is what closes the pane.
+    if [[ -n "${PRR_FANOUT_PANE:-}" ]]; then
+      printf 'pr=%s status=conflicts event=none comments=0\n' "$number" > "/tmp/prr-fanout-${number}.result"
+    fi
+    exit 4
+  fi
 fi
 
 wt="/tmp/pr-${number}-wt"
