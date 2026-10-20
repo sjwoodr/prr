@@ -520,6 +520,31 @@ To force a full fresh review of an already-reviewed PR (say, after a major
 rework), add `full`: `/prr full <PR>`, or `/prr full C=opus <PR>` to run all
 three passes. It works in a fan-out batch too.
 
+### Re-approving a merge-conflict fix (`PRR_REAPPROVE_CONFLICT_FIX`)
+
+You approve a PR, it conflicts with main, the author resolves the conflicts,
+and the push dismisses your approval. Nothing you approved changed, yet the
+re-review waits at the gate. With `PRR_REAPPROVE_CONFLICT_FIX=1` it can
+re-approve on its own, and only in that case:
+
+- `scripts/conflict-fix.py` checks the hard limits: your last review was an
+  approval GitHub dismissed, no check that passed then fails now (running
+  checks are ignored, and so is one already failing at your approval), and
+  the PR touches the same files.
+- It replays your approved version onto the new base with a 3-way merge and
+  tags each file against the new head: `clean` (identical), `resolved`
+  (conflicts filled only from either side), `new-lines` or `differs`.
+- The model classifies that evidence as a conflict fix, not one, or unclear.
+  Only a conflict fix posts, as a bare APPROVE with `reapproved=conflict-fix`
+  in the `prr-meta` marker; anything else is the ordinary re-review with the
+  gate, which names the reason.
+- `check-payload.py` refuses such a re-approval unless the evidence found the
+  PR eligible at the same head, and it carries no inline comments or replies.
+
+```bash
+export PRR_REAPPROVE_CONFLICT_FIX=1
+```
+
 ## JEB: Just Evidence, Buddy
 
 A review is full of small decisions that are really multiple choice: is this
@@ -994,6 +1019,7 @@ prr/
     ├── source-c-brief.md # Source C's brief, shared by the pi and subagent paths
     ├── pass-common.sh    # shared read-only runner (pi, opencode, codex) for source-b.sh and source-c.sh
     ├── check-payload.py  # the rules post-review.sh enforces before posting
+    ├── conflict-fix.py   # opt-in: evidence for re-approving a merge-conflict fix
     ├── prr-statusline.sh # optional: Claude Code status line (opt-in via settings.json)
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
     ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)
@@ -1016,7 +1042,8 @@ prr-local/
   prr version that posted it (`v=4b42fcc`, the checkout's short commit, with a
   `+` when it has local edits; left out when prr is not a git checkout), the
   mode, what happened to the security pass (`source_b=returned`, `timeout`,
-  `failed`...), whether it ran in a fan-out pane (`fanout=1`), seconds per
+  `failed`...), whether it ran in a fan-out pane (`fanout=1`), `reapproved=conflict-fix` on a re-approval posted without the
+  gate (see above), seconds per
   pass (`a_s`, `b_s`), the run split at the approval gate (`gate_s` from the
   start to the gate, `wait_s` from the gate to the post, taken from when the
   drafts file was written; `total_s` is both), and two checks as counts:

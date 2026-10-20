@@ -150,7 +150,8 @@ silent_marker="/tmp/pr-${number}-silent"
 # Stale artifacts from an earlier run would mislead the skill. The silent marker
 # is cleared here rather than left to the write below, so a stealth review of a
 # PR cannot make an ordinary review of that same PR quietly stealthy later.
-rm -f "$prior_json" "$since_diff" "$silent_marker"
+rm -f "$prior_json" "$since_diff" "$silent_marker" \
+  "/tmp/pr-${number}-conflict-fix.json" "/tmp/pr-${number}-conflict-fix.txt"
 
 # Start of the review, for the timings post-review.sh writes into its hidden
 # meta marker. Kept across a re-run on a moved head (same review), but a stamp
@@ -344,6 +345,14 @@ re-review context:
   prior review:    $prior_json
   since-diff:      $since_diff
 EOF
+  # PRR_REAPPROVE_CONFLICT_FIX=1: when the push since your dismissed approval
+  # may be only a merge-conflict fix, gather the evidence for re-approving it
+  # without the gate (SKILL.md, "Re-approving a conflict fix"). Best-effort:
+  # no evidence file means an ordinary re-review.
+  case "$(printf '%s' "${PRR_REAPPROVE_CONFLICT_FIX:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|on|true|yes)
+      python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/conflict-fix.py" "$number" "$repo" "$wt" || true ;;
+  esac
 fi
 
 if [[ "$mode" == "self-review" ]]; then

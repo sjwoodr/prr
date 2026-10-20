@@ -364,6 +364,9 @@ fanout=0; [[ -n "${PRR_FANOUT_PANE:-}" ]] && fanout=1
 # typing /prr (e.g. "watch" for a scheduled watcher), so stats can count those
 # apart. Restricted to [a-z0-9-] because it lands in a hidden comment.
 trigger="${PRR_TRIGGER:-}"; [[ "$trigger" =~ ^[a-z0-9-]{1,32}$ ]] || trigger=""
+# A re-approval posted without the gate (check-payload.py has already held it
+# to conflict-fix.py's evidence), so stats can count those apart.
+reapproved="$(jq -r '.reapproved // empty' "$payload")"; [[ "$reapproved" == "conflict-fix" ]] || reapproved=""
 # The payload's optional `prior` (re-review: status of each earlier finding)
 # and `ac` (ticket acceptance criteria) become counts, never text: the line
 # is hidden only from rendering. ac is no-ticket, no-criteria or unread when
@@ -394,13 +397,13 @@ if [[ "$(git -C "$prr_root" rev-parse --show-toplevel 2>/dev/null)" == "$prr_roo
     version="${version}+"
   fi
 fi
-meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} gate_s=$(since "$t0" "$gate") wait_s=$(since "$gate" "$now") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
+meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger}${reapproved:+ reapproved=$reapproved} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} gate_s=$(since "$t0" "$gate") wait_s=$(since "$gate" "$now") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
 
 # Thread replies (payload `replies`: [{in_reply_to, body}]) are posted after
 # the review, in the existing threads; they are never part of the review.
 replies="$(jq -c '[.replies // [] | .[] | select((.in_reply_to | type) == "number" and ((.body // "") != ""))]' "$payload")"
 
-jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .source_c_counts, .prior, .ac, .author_replies, .replies)
+jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .source_c_counts, .prior, .ac, .author_replies, .replies, .reapproved)
     | if ((.body // "") | contains("<!-- prr -->")) then .
       else .body = ((.body // "") + "\n\n<!-- prr -->") end
     | if ((.body // "") | contains("<!-- prr-meta ")) then .

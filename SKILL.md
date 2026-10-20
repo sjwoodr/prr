@@ -47,7 +47,9 @@ The steps below explain each part; this is the order, and none is optional.
 Personal dual-source PR review. The PR to review is provided as the skill
 argument (a full GitHub URL or a bare number). Follow every step in order.
 The approval gate in step 5 is hard: post nothing to GitHub until the user
-explicitly says yes. This is not the bundled `/review` skill.
+explicitly says yes. The one exception is opt-in and narrow: re-approving a
+push that only resolved merge conflicts (R0, `PRR_REAPPROVE_CONFLICT_FIX=1`).
+This is not the bundled `/review` skill.
 
 Two bundled scripts handle the deterministic mechanics (setup, posting,
 cleanup); the steps between them need judgment and stay manual. A full PR
@@ -1190,6 +1192,67 @@ Extra artifacts from step 1, alongside the usual ones:
 - `pr-<N>-since-diff.txt` — the diff from the prior review's commit to the
   current head, scoped to the files this PR touches (so a `main` merge into
   the branch between reviews does not add unrelated noise).
+
+## R0. Re-approving a conflict fix (opt-in)
+
+Only when setup printed a `conflict fix:` block with `candidate: yes`. That
+needs `PRR_REAPPROVE_CONFLICT_FIX=1`, and `conflict-fix.py` has already
+established the hard part: your last review was an approval that GitHub
+dismissed, no check that passed then fails now (running checks do not
+count), and the PR still touches the same files. With `candidate: no`, or no
+block at all, skip this section.
+
+It asks one question: **was the push since your approval only a fix of
+merge conflicts with the base branch?** If so, nothing you approved changed,
+and you re-approve **without the gate**. It is a classification, and yours
+to make, from the evidence:
+
+- `/tmp/pr-<N>-conflict-fix.json`: one tag per PR file. `clean` means the
+  new head is exactly your approved version replayed onto the new base;
+  `resolved` means its conflict regions hold only lines from one side or the
+  other; `new-lines` means they hold lines from neither; `differs` means it
+  changed outside any conflict.
+- `/tmp/pr-<N>-conflict-fix.txt`: for every file not `clean`, the replayed
+  version (conflict markers and all) diffed against the new head. Where it
+  says lines were cut, open the file in `/tmp/pr-<N>-wt`.
+
+Classify it as exactly one of:
+
+- **conflict fix** - every change is the merge itself: a conflict resolved
+  by keeping one side, both, or a plain combination of the two (both sides
+  added to the same list, say); the PR's code adapted to something the base
+  changed (a rename, a moved import, a new required argument), where you can
+  name the base change that forced it; or a generated file (lockfile,
+  baseline, snapshot, generated client) regenerated from the merged sources.
+  Every `clean` and `resolved` file qualifies as it stands.
+- **not** - anything else changed: new or altered behavior, a new or changed
+  test, a refactor, a cleanup, a fix for one of your findings, or any line
+  you cannot tie to the base.
+- **unclear** - you cannot tell, or could not read all the evidence.
+
+When in doubt it is unclear: getting this wrong posts an approval of code
+nobody reviewed, while unclear costs one look at the gate.
+
+**conflict fix:** do not ask. Apply the moved-head rule from step 1 (the
+head must still be the evidence's `head`), stamp `a-done` as R2 does, and
+build `/tmp/pr-<N>-review.json`:
+
+- `event` `APPROVE`, `commit_id` the evidence's `head`, no `comments`, no
+  `replies`, `"reapproved": "conflict-fix"`.
+- `body`: two or three plain sentences: you re-approve because the only
+  change since your approval (`approved` sha) is resolving merge conflicts
+  with the base branch; which files needed a resolution and how, in a few
+  words; the PR's own changes are as approved.
+- `slack_summary`: one short sentence, e.g. "Re-approved: the push only
+  resolved merge conflicts with main."
+- `ac` as step 6 describes; no `prior` or `author_replies` (no R2 ran).
+
+Run `post-review.sh` with it, which refuses the payload unless the evidence
+backs it, then tell the user what was re-approved and why, in two lines.
+
+**not or unclear:** go on with R1 as usual. At the R3 gate, add one line
+before the verdict: `conflict fix: not (<reason>)` or
+`conflict fix: unclear (<reason>)`, so the user sees why it stopped.
 
 ## R1. Gather
 

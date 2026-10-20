@@ -22,6 +22,9 @@ Source B skip that the rules did not allow and "no ticket" for a linked one):
   source_c_counts (what it contributed), and every other outcome but
   "no-model" and "skipped-prose" needs its start stamp.
 - ac: "no-ticket" is refused when the PR's title or body links a ticket.
+- reapproved: "conflict-fix" (a re-approval posted without the gate) needs
+  conflict-fix.py's evidence to have found the PR eligible, for this same
+  head, and the review to be a bare APPROVE: no inline comments, no replies.
 """
 import json
 import os
@@ -149,6 +152,32 @@ def check_ac(payload, view):
             'read it, or record "unread" if it could not be fetched'] if hit else []
 
 
+def check_reapproval(payload, tmp, number, mode):
+    why = payload.get("reapproved")
+    if why is None:
+        return []
+    if why != "conflict-fix":
+        return [f'reapproved is "{why}"; the only kind is "conflict-fix"']
+    try:
+        ev = json.load(open(os.path.join(tmp, f"pr-{number}-conflict-fix.json")))
+    except (FileNotFoundError, ValueError):
+        return ["reapproved without conflict-fix evidence: setup runs conflict-fix.py "
+                "only with PRR_REAPPROVE_CONFLICT_FIX=1"]
+    out = []
+    if mode != "re-review":
+        out.append("reapproved outside a re-review")
+    if not ev.get("eligible"):
+        out.append(f"reapproved, but the evidence says no: {ev.get('reason')}")
+    if payload.get("event") != "APPROVE":
+        out.append("a conflict-fix re-approval posts APPROVE")
+    if payload.get("commit_id") != ev.get("head"):
+        out.append("commit_id is not the head the conflict-fix evidence was taken at")
+    if payload.get("comments") or payload.get("replies"):
+        out.append("a conflict-fix re-approval carries no inline comments or replies: "
+                   "anything worth saying goes through the gate")
+    return out
+
+
 def check(number, payload_path, tmp="/tmp"):
     payload = json.load(open(payload_path))
     try:
@@ -164,7 +193,8 @@ def check(number, payload_path, tmp="/tmp"):
             + check_gate(payload, os.path.join(tmp, f"pr-{number}-draft.json"))
             + check_source_b(payload, tmp, number, mode, paths)
             + check_source_c(payload, tmp, number, paths)
-            + check_ac(payload, view))
+            + check_ac(payload, view)
+            + check_reapproval(payload, tmp, number, mode))
 
 
 def selftest():
@@ -228,6 +258,21 @@ def selftest():
         assert check("7", os.path.join(tmp, "p.json"), tmp) == []
         put("p.json", good)
         assert any("no " in p and "draft" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
+        # A conflict-fix re-approval needs eligible evidence for this head.
+        put("pr-7-mode", "re-review\n")
+        re_ok = {"body": "Re-approving.", "event": "APPROVE", "commit_id": "abc", "comments": [],
+                 "reapproved": "conflict-fix", "slack_summary": "Re-approved."}
+        put("p.json", re_ok)
+        assert any("without conflict-fix evidence" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
+        put("pr-7-conflict-fix.json", {"eligible": True, "head": "abc", "reason": "2 clean"})
+        assert check("7", os.path.join(tmp, "p.json"), tmp) == []
+        for change, needle in (({"event": "COMMENT"}, "posts APPROVE"), ({"commit_id": "def"}, "not the head"),
+                               ({"comments": [c1]}, "no inline comments"), ({"reapproved": "x"}, "only kind")):
+            put("p.json", {**re_ok, **change})
+            assert any(needle in p for p in check("7", os.path.join(tmp, "p.json"), tmp)), change
+        put("pr-7-conflict-fix.json", {"eligible": False, "head": "abc", "reason": "new files"})
+        put("p.json", re_ok)
+        assert any("evidence says no" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
     assert all_prose(["README.md", "docs/x.rst", "LICENSE"])
     assert not all_prose(["README.md", "CLAUDE.md"])
     assert not all_prose([".github/workflows/ci.md"])
