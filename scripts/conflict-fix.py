@@ -182,20 +182,21 @@ def run(number, repo, wt, tmp="/tmp"):
     v = {"pr": int(number), "head": head, "approved": prior.get("commit_id"), "eligible": False,
          "reason": "", "files": {}}
 
-    def stop(reason):
-        v["reason"] = reason
+    # `code` is the short form prr-meta records (cf=ineligible-<code>).
+    def stop(code, reason):
+        v["code"], v["reason"] = code, reason
         return v
 
     if prior.get("state") != "DISMISSED":
-        return stop(f"your last review is {str(prior.get('state')).lower()}, not a dismissed approval")
+        return stop("not-dismissed", f"your last review is {str(prior.get('state')).lower()}, not a dismissed approval")
     pages = gh_json("api", "--paginate", "--slurp", f"repos/{repo}/issues/{number}/timeline")
     events = [e for page in pages for e in page if e.get("event") == "review_dismissed"]
     hit = next((e for e in reversed(events)
                 if (e.get("dismissed_review") or {}).get("review_id") == prior.get("id")), None)
     if not hit or (hit["dismissed_review"].get("state") or "").lower() != "approved":
-        return stop("the dismissed review was not an approval")
+        return stop("not-approval", "the dismissed review was not an approval")
     if not v["approved"]:
-        return stop("the approved commit is unknown")
+        return stop("no-commit", "the approved commit is unknown")
 
     def failed(sha):
         pages = gh_json("api", "--paginate", "--slurp", f"repos/{repo}/commits/{sha}/check-runs")
@@ -205,7 +206,7 @@ def run(number, repo, wt, tmp="/tmp"):
     # approved; one that started failing since needs a look.
     broke = sorted(failed(head) - failed(v["approved"]))
     if broke:
-        return stop(f"checks failing since your approval: {', '.join(broke[:5])}")
+        return stop("checks", f"checks failing since your approval: {', '.join(broke[:5])}")
 
     base = gh_json("pr", "view", str(number), "--repo", repo, "--json", "baseRefName")["baseRefName"]
     # Merge bases need history; a standalone checkout is shallow (no blobs needed).
@@ -220,7 +221,7 @@ def run(number, repo, wt, tmp="/tmp"):
     before, after = names(old, v["approved"]), names(new, head)
     if before != after:
         added, dropped = sorted(after - before), sorted(before - after)
-        return stop("the PR's files changed:"
+        return stop("files", "the PR's files changed:"
                     + (f" now also {', '.join(added[:5])}" if added else "")
                     + (f" no longer {', '.join(dropped[:5])}" if dropped else ""))
 
@@ -229,7 +230,7 @@ def run(number, repo, wt, tmp="/tmp"):
         ours, fork, theirs = (blob(wt, r, path) for r in (v["approved"], old, new))
         now = blob(wt, head, path)
         if not all(is_text(x) for x in (ours, fork, theirs, now)):
-            return stop(f"{path} is binary")
+            return stop("binary", f"{path} is binary")
         # An absent file merges as an empty one, which covers a file the PR
         # adds or deletes and one the base adds or deletes alike.
         merged, conflicts = merge3(ours, fork, theirs)
@@ -238,7 +239,7 @@ def run(number, repo, wt, tmp="/tmp"):
         if tag != "clean":
             report.append(evidence(path, tag, merged, lines(now), new_lines))
 
-    v["eligible"] = True
+    v["eligible"], v["code"] = True, "eligible"
     tags = list(v["files"].values())
     v["reason"] = ", ".join(f"{tags.count(t)} {t}" for t in ("clean", "resolved", "new-lines", "differs")
                             if t in tags) or "no files"
@@ -254,7 +255,7 @@ def main():
     try:
         v = run(number, repo, wt)
     except Exception as e:  # noqa: BLE001 - unknown means a normal, gated re-review
-        v = {"pr": int(number), "eligible": False, "reason": f"could not check: {e}"}
+        v = {"pr": int(number), "eligible": False, "code": "error", "reason": f"could not check: {e}"}
     with open(f"/tmp/pr-{number}-conflict-fix.json", "w") as f:
         json.dump(v, f, indent=1)
     print("conflict fix:")

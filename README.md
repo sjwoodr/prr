@@ -1043,7 +1043,9 @@ prr-local/
   `+` when it has local edits; left out when prr is not a git checkout), the
   mode, what happened to the security pass (`source_b=returned`, `timeout`,
   `failed`...), whether it ran in a fan-out pane (`fanout=1`), `reapproved=conflict-fix` on a re-approval posted without the
-  gate (see above), seconds per
+  gate (see above), what the conflict-fix check made of a re-review when it
+  ran (`cf=ineligible-checks`, or `cf=conflict-fix` / `not` / `unclear` with
+  `cf_clean=6 cf_resolved=1 cf_new=0 cf_differs=0`), seconds per
   pass (`a_s`, `b_s`), the run split at the approval gate (`gate_s` from the
   start to the gate, `wait_s` from the gate to the post, taken from when the
   drafts file was written; `total_s` is both), and two checks as counts:

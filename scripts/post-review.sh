@@ -121,6 +121,26 @@ gate_stamp() {
   return 0
 }
 
+# What the opt-in conflict-fix check made of a re-review (conflict-fix.py's
+# evidence, plus the model's call from the payload's `conflict_fix`), as
+# prr-meta fields: cf=ineligible-<why> when a hard limit ruled it out, else
+# cf=conflict-fix|not|unclear and the per-file tag counts the call rested on.
+# Empty when the check did not run. $1 is the payload (may be empty).
+cf_fields() {
+  local ev="/tmp/pr-${number}-conflict-fix.json" call=""
+  [[ -f "$ev" ]] || return 0
+  if [[ -n "${1:-}" && -f "$1" ]]; then
+    call="$(jq -r 'if .reapproved == "conflict-fix" then "conflict-fix" else (.conflict_fix // "") end' "$1" 2>/dev/null || true)"
+  fi
+  jq -r --arg call "$call" '
+    def n(t): [.files // {} | .[] | select(. == t)] | length;
+    def safe: tostring | gsub("[^a-z0-9-]"; "");
+    if .eligible != true then "cf=ineligible-\(.code // "unknown" | safe)"
+    else "cf=\(if ($call | test("^(conflict-fix|not|unclear)$")) then $call else "unrecorded" end)"
+         + " cf_clean=\(n("clean")) cf_resolved=\(n("resolved")) cf_new=\(n("new-lines")) cf_differs=\(n("differs"))"
+    end' "$ev" 2>/dev/null || true
+}
+
 # One JSON line per run in a local log, written from the stamps before cleanup
 # deletes them: which sources started and finished, and seconds per pass. It is
 # the only record a self-review or a declined gate leaves, since neither posts.
@@ -141,7 +161,7 @@ log_run() {
       --arg outcome "$1" --arg event "${2:-}" --arg silent "$silent" \
       --arg trigger "$(t="${PRR_TRIGGER:-}"; [[ "$t" =~ ^[a-z0-9-]{1,32}$ ]] && echo "$t")" \
       --arg t0 "$t" --arg now "$n" \
-      --arg a "$(st a-done)" --arg g "$(gate_stamp)" \
+      --arg a "$(st a-done)" --arg g "$(gate_stamp)" --arg cf "$(cf_fields "${payload:-}")" \
       --arg bs "$(st sourceb-started)" --arg bd "$(st b-done)" \
       --arg cs "$(st sourcec-started)" --arg cd "$(st c-done)" '
       def num: if . == "" then null else tonumber end;
@@ -154,7 +174,8 @@ log_run() {
        sources: (if $mode == "re-review" then 0
                  else 1 + (if $bd != "" then 1 else 0 end) + (if $cd != "" then 1 else 0 end) end),
        a_s: dur($t0; $a), b_s: dur($bs; $bd), c_s: dur($cs; $cd),
-       gate_s: dur($t0; $g), wait_s: dur($g; $now), total_s: dur($t0; $now)}
+       gate_s: dur($t0; $g), wait_s: dur($g; $now), total_s: dur($t0; $now),
+       cf: (if $cf == "" then null else $cf end)}
       ' >> "$log"
   } 2>/dev/null || echo "prr: could not write the run log $log" >&2
   return 0
@@ -367,6 +388,7 @@ trigger="${PRR_TRIGGER:-}"; [[ "$trigger" =~ ^[a-z0-9-]{1,32}$ ]] || trigger=""
 # A re-approval posted without the gate (check-payload.py has already held it
 # to conflict-fix.py's evidence), so stats can count those apart.
 reapproved="$(jq -r '.reapproved // empty' "$payload")"; [[ "$reapproved" == "conflict-fix" ]] || reapproved=""
+cf="$(cf_fields "$payload")"
 # The payload's optional `prior` (re-review: status of each earlier finding)
 # and `ac` (ticket acceptance criteria) become counts, never text: the line
 # is hidden only from rendering. ac is no-ticket, no-criteria or unread when
@@ -397,13 +419,13 @@ if [[ "$(git -C "$prr_root" rev-parse --show-toplevel 2>/dev/null)" == "$prr_roo
     version="${version}+"
   fi
 fi
-meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger}${reapproved:+ reapproved=$reapproved} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} gate_s=$(since "$t0" "$gate") wait_s=$(since "$gate" "$now") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
+meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger}${reapproved:+ reapproved=$reapproved}${cf:+ $cf} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} gate_s=$(since "$t0" "$gate") wait_s=$(since "$gate" "$now") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
 
 # Thread replies (payload `replies`: [{in_reply_to, body}]) are posted after
 # the review, in the existing threads; they are never part of the review.
 replies="$(jq -c '[.replies // [] | .[] | select((.in_reply_to | type) == "number" and ((.body // "") != ""))]' "$payload")"
 
-jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .source_c_counts, .prior, .ac, .author_replies, .replies, .reapproved)
+jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .source_c_counts, .prior, .ac, .author_replies, .replies, .reapproved, .conflict_fix)
     | if ((.body // "") | contains("<!-- prr -->")) then .
       else .body = ((.body // "") + "\n\n<!-- prr -->") end
     | if ((.body // "") | contains("<!-- prr-meta ")) then .

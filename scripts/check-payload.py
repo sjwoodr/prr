@@ -22,6 +22,8 @@ Source B skip that the rules did not allow and "no ticket" for a linked one):
   source_c_counts (what it contributed), and every other outcome but
   "no-model" and "skipped-prose" needs its start stamp.
 - ac: "no-ticket" is refused when the PR's title or body links a ticket.
+- conflict_fix: when that evidence found a re-review eligible, the payload
+  records the model's call ("conflict-fix", "not" or "unclear") for stats.
 - reapproved: "conflict-fix" (a re-approval posted without the gate) needs
   conflict-fix.py's evidence to have found the PR eligible, for this same
   head, and the review to be a bare APPROVE: no inline comments, no replies.
@@ -152,10 +154,27 @@ def check_ac(payload, view):
             'read it, or record "unread" if it could not be fetched'] if hit else []
 
 
+CF_CALLS = ("conflict-fix", "not", "unclear")
+
+
 def check_reapproval(payload, tmp, number, mode):
     why = payload.get("reapproved")
+    call = payload.get("conflict_fix")
+    if call is not None and call not in CF_CALLS:
+        return [f'conflict_fix is "{call}", not one of {", ".join(CF_CALLS)}']
     if why is None:
+        try:
+            ev = json.load(open(os.path.join(tmp, f"pr-{number}-conflict-fix.json")))
+        except (FileNotFoundError, ValueError):
+            return []
+        if ev.get("eligible") and call is None:
+            return ["conflict_fix missing: the push was eligible, so record the R0 call "
+                    '("not" or "unclear" when it went through the gate)']
+        if call == "conflict-fix":
+            return ['conflict_fix is "conflict-fix" but reapproved is not set']
         return []
+    if call not in (None, "conflict-fix"):
+        return [f'reapproved, but conflict_fix says "{call}"']
     if why != "conflict-fix":
         return [f'reapproved is "{why}"; the only kind is "conflict-fix"']
     try:
@@ -270,7 +289,19 @@ def selftest():
                                ({"comments": [c1]}, "no inline comments"), ({"reapproved": "x"}, "only kind")):
             put("p.json", {**re_ok, **change})
             assert any(needle in p for p in check("7", os.path.join(tmp, "p.json"), tmp)), change
+        # A gated re-review of an eligible push records the call.
+        gated = {"body": "Re-review.", "event": "APPROVE", "commit_id": "abc", "comments": []}
+        put("p.json", gated)
+        assert any("conflict_fix missing" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
+        put("p.json", {**gated, "conflict_fix": "unclear"})
+        assert check("7", os.path.join(tmp, "p.json"), tmp) == []
+        put("p.json", {**gated, "conflict_fix": "maybe"})
+        assert any("not one of" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
+        put("p.json", {**re_ok, "conflict_fix": "not"})
+        assert any("conflict_fix says" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
         put("pr-7-conflict-fix.json", {"eligible": False, "head": "abc", "reason": "new files"})
+        put("p.json", gated)
+        assert check("7", os.path.join(tmp, "p.json"), tmp) == []
         put("p.json", re_ok)
         assert any("evidence says no" in p for p in check("7", os.path.join(tmp, "p.json"), tmp))
     assert all_prose(["README.md", "docs/x.rst", "LICENSE"])

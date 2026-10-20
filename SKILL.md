@@ -1252,7 +1252,10 @@ backs it, then tell the user what was re-approved and why, in two lines.
 
 **not or unclear:** go on with R1 as usual. At the R3 gate, add one line
 before the verdict: `conflict fix: not (<reason>)` or
-`conflict fix: unclear (<reason>)`, so the user sees why it stopped.
+`conflict fix: unclear (<reason>)`, so the user sees why it stopped. If the
+R4 review posts, add `"conflict_fix": "not"` or `"unclear"` to its payload:
+`post-review.sh` records the call in `prr-meta` (`cf=`, with the evidence's
+per-file tag counts), and refuses an eligible re-review's payload without it.
 
 ## R1. Gather
 
