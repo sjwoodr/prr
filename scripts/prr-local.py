@@ -225,9 +225,9 @@ def ascii_clean(text):
     return text.encode("ascii", "ignore").decode("ascii")
 
 
-def run(cmd, check=True, capture=True):
+def run(cmd, check=True, capture=True, env=None):
     return subprocess.run(
-        cmd, check=check, text=True,
+        cmd, check=check, text=True, env=env,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.STDOUT if capture else None,
     )
@@ -765,7 +765,10 @@ def main():
         args.think, args.think_budget = False, 0
 
     setup_cmd = [SETUP] + (["--silent"] if args.silent else []) + [args.pr]
-    setup = run(setup_cmd, check=False)
+    # No conflict-fix check: it only decides whether a re-approval may skip
+    # prr's gate, which this flow never does, and left on it would make
+    # post-review.sh expect a call this flow does not make.
+    setup = run(setup_cmd, check=False, env={**os.environ, "PRR_REAPPROVE_CONFLICT_FIX": "0"})
     print(setup.stdout, end="")
     if setup.returncode != 0:
         sys.exit(f"setup-review.sh failed ({setup.returncode})")
