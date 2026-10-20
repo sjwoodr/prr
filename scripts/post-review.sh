@@ -107,6 +107,20 @@ write_fanout_result() {
     "$number" "$1" "${2:-none}" "${3:-0}" > "/tmp/prr-fanout-${number}.result"
 }
 
+stamp() { local v; v="$(cat "/tmp/pr-${number}-$1" 2>/dev/null || true)"; [[ "$v" =~ ^[0-9]+$ ]] && echo "$v"; return 0; }
+since() { [[ -n "$1" && -n "$2" ]] && echo $(($2 - $1)) || echo -; }
+# When the gate was shown: the drafts file is written just before it, so its
+# mtime splits the run into review time (start to gate) and the wait for a
+# yes (gate to post). A file older than this run's start is a leftover and
+# counts as no stamp. Rewriting the drafts at the gate moves the stamp later.
+gate_stamp() {
+  local f="/tmp/pr-${number}-draft.json" m t0
+  m="$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || true)"
+  t0="$(stamp started)"
+  [[ "$m" =~ ^[0-9]+$ && -n "$t0" && "$m" -ge "$t0" ]] && echo "$m"
+  return 0
+}
+
 # One JSON line per run in a local log, written from the stamps before cleanup
 # deletes them: which sources started and finished, and seconds per pass. It is
 # the only record a self-review or a declined gate leaves, since neither posts.
@@ -127,7 +141,7 @@ log_run() {
       --arg outcome "$1" --arg event "${2:-}" --arg silent "$silent" \
       --arg trigger "$(t="${PRR_TRIGGER:-}"; [[ "$t" =~ ^[a-z0-9-]{1,32}$ ]] && echo "$t")" \
       --arg t0 "$t" --arg now "$n" \
-      --arg a "$(st a-done)" \
+      --arg a "$(st a-done)" --arg g "$(gate_stamp)" \
       --arg bs "$(st sourceb-started)" --arg bd "$(st b-done)" \
       --arg cs "$(st sourcec-started)" --arg cd "$(st c-done)" '
       def num: if . == "" then null else tonumber end;
@@ -139,7 +153,8 @@ log_run() {
        c: {started: ($cs != ""), done: ($cd != "")},
        sources: (if $mode == "re-review" then 0
                  else 1 + (if $bd != "" then 1 else 0 end) + (if $cd != "" then 1 else 0 end) end),
-       a_s: dur($t0; $a), b_s: dur($bs; $bd), c_s: dur($cs; $cd), total_s: dur($t0; $now)}
+       a_s: dur($t0; $a), b_s: dur($bs; $bd), c_s: dur($cs; $cd),
+       gate_s: dur($t0; $g), wait_s: dur($g; $now), total_s: dur($t0; $now)}
       ' >> "$log"
   } 2>/dev/null || echo "prr: could not write the run log $log" >&2
   return 0
@@ -321,8 +336,6 @@ case "$source_b" in
   *) source_b="unknown" ;;
 esac
 now="$(date +%s)"
-stamp() { local v; v="$(cat "/tmp/pr-${number}-$1" 2>/dev/null || true)"; [[ "$v" =~ ^[0-9]+$ ]] && echo "$v"; return 0; }
-since() { [[ -n "$1" && -n "$2" ]] && echo $(($2 - $1)) || echo -; }
 # Source C is opt-in, so its fields appear only when it was asked for, keeping
 # every older review's marker unchanged. The model name is cut to a safe
 # charset: it lands inside an HTML comment.
@@ -345,6 +358,7 @@ if [[ -n "$source_c" ]]; then
   source_c_meta="${source_c_meta}${c_counts:+ $c_counts}"
 fi
 t0="$(stamp started)"
+gate="$(gate_stamp)"
 fanout=0; [[ -n "${PRR_FANOUT_PANE:-}" ]] && fanout=1
 # Optional PRR_TRIGGER names what started the review when it was not a person
 # typing /prr (e.g. "watch" for a scheduled watcher), so stats can count those
@@ -380,7 +394,7 @@ if [[ "$(git -C "$prr_root" rev-parse --show-toplevel 2>/dev/null)" == "$prr_roo
     version="${version}+"
   fi
 fi
-meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
+meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} gate_s=$(since "$t0" "$gate") wait_s=$(since "$gate" "$now") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
 
 # Thread replies (payload `replies`: [{in_reply_to, body}]) are posted after
 # the review, in the existing threads; they are never part of the review.

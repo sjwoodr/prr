@@ -1017,8 +1017,9 @@ prr-local/
   `+` when it has local edits; left out when prr is not a git checkout), the
   mode, what happened to the security pass (`source_b=returned`, `timeout`,
   `failed`...), whether it ran in a fan-out pane (`fanout=1`), seconds per
-  pass (`a_s`, `b_s`, `total_s`; `total_s`
-  includes time at the approval gate), and two checks as counts:
+  pass (`a_s`, `b_s`), the run split at the approval gate (`gate_s` from the
+  start to the gate, `wait_s` from the gate to the post, taken from when the
+  drafts file was written; `total_s` is both), and two checks as counts:
   - `ac=6 ac_done=4 ac_partly=1 ac_missing=0 ac_unclear=1`: the linked
     ticket's acceptance criteria, each checked against the diff. With nothing
     to check it says why: `ac=no-ticket`, `ac=no-criteria` (the ticket has
