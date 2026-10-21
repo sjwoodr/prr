@@ -1195,7 +1195,8 @@ already posted).
 
 Reached only when `setup-review.sh` prints `MODE: re-review` — the PR
 already carries a prr review from you. Do **not** repeat the dual-source
-review and do **not** spawn Source B. Check only whether the findings from
+review and do **not** spawn Source B (unless the user picks **Full review
+now** at R3, when the changes are too big to sign off on; see R4). Check only whether the findings from
 your prior review were addressed by the commits pushed since it.
 
 Extra artifacts from step 1, alongside the usual ones:
@@ -1427,9 +1428,30 @@ exist.
 | Comment only, do not block | The same comments as a COMMENT review. |
 | Report only | Post nothing to the PR. |
 
+**Too big to sign off on from a re-review.** A re-review checks earlier
+findings; it does not review new code. When the commits since your review
+add scope you never reviewed (new behavior, new production code paths, a
+rewrite of logic you approved, the PR taking on a new area), any verdict
+from here would sign code nobody read. Fixes for your findings, merges of
+the base branch, regenerated files and test changes you read in full do not
+count. In that case lead with a full review, say in the gate summary what
+the new scope is and roughly how big, and use this set:
+
+| label | description |
+|---|---|
+| Full review now (Recommended) | Run a full review of the PR at this head here, every pass, then the usual gate. Nothing is posted first. |
+| <the verdict> as recommended | The re-review's own verdict, e.g. "Request changes as recommended", for when the user judges the new scope already covered. |
+| Report only | Post nothing to the PR. |
+
 Options mean the same as in step 5; "report only" is the R4 report-only
 path (post nothing, clean up only). Post nothing until the user picks, and
 re-ask rather than guessing if a prose reply is ambiguous.
+
+An option's label says exactly what picking it does, and nothing more. Never
+word one as if it starts a later step it does not start ("report only, then
+full"): the user reads the label, not the description, and a run that stops
+where they expected it to continue leaves the PR waiting on a review nobody
+is doing.
 
 ## R4. Post and clean up (only after approval)
 
@@ -1455,6 +1477,25 @@ The user's menu pick from R3 maps to one of:
   describes. Both are recorded in `prr-meta` as counts and stripped from
   the posted body. Then run the post script with the payload.
 
-Either way, finish with `post-review.sh` so the worktree and artifacts are
-removed. Its own `cleanup verified:` / `cleanup INCOMPLETE:` line is the
+- **Full review now** - do **not** run `post-review.sh`: it ends the run,
+  and in a fan-out pane its result file closes the pane. Re-run setup with
+  `--full`, plus the same flags the first setup had (`--silent`, `--noeyes`;
+  the silent marker is cleared and only rewritten when the flag is passed
+  again):
+
+  ```
+  ~/.claude/skills/prr/scripts/setup-review.sh --full <PR-url-or-number>
+  ```
+
+  It rebuilds the worktree and reports `MODE: full-review` with a
+  `forced full:` line. Continue from step 2 exactly as a full review, Source
+  C included when the original arguments asked for it (a re-review's own
+  arguments may not have; then it stays off unless the user says otherwise).
+  The R2 statuses of your earlier findings carry over as the forced-full
+  rules in "Three modes" describe: say in the body which still stand, and do
+  not draft duplicates of them. The pick at R3 consented to the review, not
+  to posting: the step 5 gate decides what is posted.
+
+Except after **Full review now**, finish with `post-review.sh` so the worktree
+and artifacts are removed. Its own `cleanup verified:` / `cleanup INCOMPLETE:` line is the
 confirmation, exactly as in step 6 — do not run a separate check.

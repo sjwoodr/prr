@@ -521,6 +521,10 @@ your earlier prr review and switches to an **incremental re-review**:
   counts or was dismissed.
 - It proposes an updated verdict (e.g. APPROVE once every blocker is
   resolved).
+- When the commits since your review add scope you never reviewed, it
+  recommends **Full review now** at the gate, which runs the full review in
+  the same session (nothing is posted first) instead of signing off on code
+  a re-review cannot vouch for.
 
 To force a full fresh review of an already-reviewed PR (say, after a major
 rework), add `full`: `/prr full <PR>`, or `/prr full C=opus <PR>` to run all
