@@ -150,7 +150,7 @@ silent_marker="/tmp/pr-${number}-silent"
 # Stale artifacts from an earlier run would mislead the skill. The silent marker
 # is cleared here rather than left to the write below, so a stealth review of a
 # PR cannot make an ordinary review of that same PR quietly stealthy later.
-rm -f "$prior_json" "$since_diff" "$silent_marker" \
+rm -f "$prior_json" "$since_diff" "$silent_marker" "/tmp/pr-${number}-drift.txt" \
   "/tmp/pr-${number}-conflict-fix.json" "/tmp/pr-${number}-conflict-fix.txt"
 
 # Start of the review, for the timings post-review.sh writes into its hidden
@@ -204,7 +204,7 @@ head_sha="$(git -C "$wt" rev-parse HEAD)"
 
 # Artifacts the review pass reads.
 gh pr view "$number" --repo "$repo" \
-  --json number,title,state,headRefName,author,files,reviews,comments,body \
+  --json number,title,state,headRefName,baseRefName,baseRefOid,reviewDecision,author,files,reviews,comments,body \
   > "$view"
 gh pr diff "$number" --repo "$repo" > "$diff"
 gh api --paginate "repos/${repo}/pulls/${number}/comments" > "$comments"
@@ -281,6 +281,15 @@ if [[ -n "$prior" ]]; then
       commits_since="$(git -C "$wt" rev-list --count "${prior_sha}..HEAD" 2>/dev/null || echo unknown)"
       [[ -f "$wt/.git/shallow" && "$commits_since" != "0" ]] \
         && commits_since="$commits_since (approx; shallow checkout)"
+      # An empty diff reads as "safe", but it only means the PR's own files did
+      # not change; base-drift.py (below) covers what a merge did around them.
+      if [[ ! -s "$since_diff" ]]; then
+        printf '%s\n' "# No change to the PR's files since ${prior_sha:0:9} (${commits_since} commit(s))." \
+          "# A merge of the base branch can still break the PR from outside its files;" \
+          "# see /tmp/pr-${number}-drift.txt and the setup output's base drift line." > "$since_diff"
+      fi
+      base_oid="$(jq -r '.baseRefOid // ""' "$view")"
+      [[ -n "$base_oid" ]] && { "${fetch[@]}" ${depth[@]+"${depth[@]}"} "$base_oid" 2>/dev/null || true; }
     else
       echo "prior review commit ${prior_sha} is not fetchable (likely a" \
            "rebase or force-push) — compare against the full PR diff instead" \
@@ -340,11 +349,18 @@ if [[ "$mode" == "re-review" ]]; then
   cat <<EOF
 re-review context:
   prior review:    $me / $(jq -r .review.state "$prior_json") / $(jq -r '.review.submitted_at' "$prior_json")
+  review now:      $(jq -r 'if .review.state == "DISMISSED" then "dismissed (no longer counts)" else "still in force (\(.review.state))" end' "$prior_json"); PR decision: $(jq -r '.reviewDecision // "" | if . == "" then "none" else . end' "$view")
   prior findings:  $(jq '.findings | length' "$prior_json")
   commits since:   $commits_since
   prior review:    $prior_json
   since-diff:      $since_diff
 EOF
+  # The since-diff only covers the PR's files; this covers what a base merge
+  # changed around them (SKILL.md R1).
+  if [[ -n "${prior_sha:-}" ]] && git -C "$wt" cat-file -e "${prior_sha}^{commit}" 2>/dev/null; then
+    python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/base-drift.py" \
+      "$number" "$wt" "$prior_sha" "${base_oid:-}" || true
+  fi
   # PRR_REAPPROVE_CONFLICT_FIX=1: when the push since your dismissed approval
   # may be only a merge-conflict fix, gather the evidence for re-approving it
   # without the gate (SKILL.md, "Re-approving a conflict fix"). Best-effort:

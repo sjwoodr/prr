@@ -513,6 +513,12 @@ your earlier prr review and switches to an **incremental re-review**:
   finding **Fixed / Partially fixed / Not addressed / No longer applies /
   Unclear**, and sorts the author's reply to each (see
   [JEB](#jeb-just-evidence-buddy)).
+- It checks what a merge of the base branch changed around the PR's files
+  (`scripts/base-drift.py`): every changed path the PR's files mention, by
+  path, file name or name stem, deletions first. A PR whose own files did
+  not change can still break when the merge deletes a file it reads.
+- It reads CI on the new head and says whether your earlier review still
+  counts or was dismissed.
 - It proposes an updated verdict (e.g. APPROVE once every blocker is
   resolved).
 
@@ -1020,6 +1026,7 @@ prr/
     ├── pass-common.sh    # shared read-only runner (pi, opencode, codex) for source-b.sh and source-c.sh
     ├── check-payload.py  # the rules post-review.sh enforces before posting
     ├── conflict-fix.py   # opt-in: evidence for re-approving a merge-conflict fix
+    ├── base-drift.py     # re-review: paths a base merge changed that the PR mentions
     ├── prr-statusline.sh # optional: Claude Code status line (opt-in via settings.json)
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
     ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)

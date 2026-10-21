@@ -218,6 +218,13 @@ Throughout this workflow:
   say so and credit it. Where you cannot tell from reading, say that plainly
   or ask. Never assume a passing test is a meaningful one.
 
+  The same goes for a test that builds its own copy of a repo file (a
+  fixture repo, a temp directory seeded with a fake baseline or config)
+  instead of reading the real one. It passes whatever happens to the real
+  file, so green CI says nothing about whether the code still works against
+  it. When the real file changed or was deleted, say so and do not count
+  that test as evidence.
+
 - **Run the bundled scripts bare — never pipe them through `tee`.** Invoke
   `setup-review.sh` and `post-review.sh` exactly as documented, with no
   `2>&1 | tee /tmp/...` wrapper. Piping turns the call into a pipeline, and
@@ -385,8 +392,11 @@ Then:
     a public repo. A tool you
     have not tried to load is not missing. Not hypothetical: an unattended
     run in a session where Jira worked earlier that day recorded "unread"
-    for two reviews without ever making the call. Only if no Atlassian MCP
-    is configured, the load finds nothing, or the call itself fails (auth,
+    for two reviews without ever making the call. A server that is still
+    connecting when the session starts is not missing either: carry on with
+    the review and load the tool again just before the gate (step 5 or R3),
+    then read the ticket. Only if no Atlassian MCP is configured, the load
+    still finds nothing on that second try, or the call itself fails (auth,
     error), skip the fetch and proceed without ticket context. Note the skip once in your console
     output so the user knows the ticket was not read, and record
     `ac: "unread"` in step 6. Do **not** mention
@@ -405,7 +415,10 @@ anything you post describes a tree that no longer exists, and an APPROVE in
 particular approves code you never read.
 
 **Re-check the head immediately before you build the payload in step 6**, and
-again if any noticeable time passes at the gate:
+again if any noticeable time passes at the gate. A discussion at the gate counts:
+when the user asks about the PR instead of picking (is it fixed, what does CI
+say, is my review still standing), re-check the head before answering, since an
+answer about a head that has moved is wrong however carefully it was reasoned:
 
 ```
 gh pr view <N> --repo <owner/repo> --json headRefOid --jq '.headRefOid'
@@ -1191,7 +1204,15 @@ Extra artifacts from step 1, alongside the usual ones:
   (`findings[]`: `path`, `line`, `body`).
 - `pr-<N>-since-diff.txt` — the diff from the prior review's commit to the
   current head, scoped to the files this PR touches (so a `main` merge into
-  the branch between reviews does not add unrelated noise).
+  the branch between reviews does not add unrelated noise). When it holds
+  no change it says so in a `#` header, which does **not** mean nothing
+  happened: see the drift report.
+- `pr-<N>-drift.txt` — what that scoping hides: every path changed since the
+  prior review outside the PR's files, with the ones the PR's files mention
+  (by path, file name or name stem) listed first, and where. Setup prints the
+  `commits split` (the author's own commits, merges, commits from the base
+  branch) and a `base drift` line naming the mentioned paths, deletions
+  first.
 
 ## R0. Re-approving a conflict fix (opt-in)
 
@@ -1264,6 +1285,21 @@ per-file tag counts), and refuses an eligible re-review's payload without it.
   printed. If that file says the prior commit was not fetchable (rebase or
   force-push), fall back to the full PR diff (`pr-<N>-diff.txt`) and say so
   in the report.
+- Read the `commits split` and `base drift` lines. A merge of the base
+  branch can break the PR without touching its files: a script reading a
+  path the merge deleted, a test importing a module it rewrote. For every
+  mentioned path, open the mention in the worktree and decide whether the
+  PR still works against the new version. A mentioned path that was
+  deleted and is still read is a blocker until shown otherwise. A text
+  match can be a false alarm (a comment, an unrelated string); say which
+  ones you dismissed and why.
+- Read CI on the current head with the same check-runs query a full review
+  uses (see Tooling). For each failing check, say whether it plausibly comes
+  from the PR's files or from what the base merge brought in. Pending is
+  pending: do not report it as green.
+- Note the `review now` line: whether your prior review still counts or was
+  dismissed, and the PR's review decision. Branch rules decide which pushes
+  dismiss which reviews, so read it rather than assuming.
 - Read the author's replies under each prior finding: the comments in
   `pr-<N>-comments.json` whose `in_reply_to_id` is that finding's comment.
 - Fetch the linked ticket's acceptance criteria exactly as step 1 does. The
@@ -1319,7 +1355,10 @@ they checked and what it showed) becomes done or missing on that answer;
 cite the reply as the evidence.
 
 Then skim the since-diff once for any obvious regression the fixes
-introduced. This is a light pass, not a new dual-source review.
+introduced, and settle each mentioned drift path from R1 as fine or a
+regression. A drift regression is a new finding: anchor its inline comment
+on the line in the PR that mentions the path. This is a light pass, not a
+new dual-source review.
 
 When it is done, stamp it as step 2 describes:
 `~/.claude/skills/prr/scripts/source-b-clock.sh a-done <PR-number>`.
@@ -1333,7 +1372,11 @@ Show the user:
 - Every drafted thread reply, verbatim, with the thread it answers.
 - The acceptance-criteria check, one line per criterion, or the one line
   saying there was nothing to check.
-- Any regression noticed in R2.
+- Any regression noticed in R2, drift regressions included, and the
+  mentioned drift paths you dismissed.
+- CI on the current head, with each failure attributed to the PR or to the
+  base merge.
+- The `review now` line: whether your prior review still stands.
 - A proposed updated verdict, decisive by default: `APPROVE` if every
   blocker is fixed, otherwise `REQUEST_CHANGES`. Only fall back to
   `COMMENT` if it is genuinely unclear whether the blockers were
@@ -1343,7 +1386,11 @@ Re-read the threads with `setup-review.sh --threads` first, as step 5 does,
 and save any drafted inline comments to `/tmp/pr-<N>-draft.json` as step 5 does.
 
 Then ask with `AskUserQuestion`, same as step 5. Re-review always keeps a
-"report only" option, because posting nothing is a normal outcome here.
+"report only" option, because posting nothing is a normal outcome here. It
+is not the recommendation when R2 found a drift regression, even if the
+PR's own files did not change and the verdict stays the same: the author
+cannot see it unless you post it, so recommend the follow-up review with
+that comment (and the still-open findings) first.
 
 Same rule as step 5: **do not add a "Chat about this" option**, the tool
 appends its own. `AskUserQuestion` allows at most four options per
