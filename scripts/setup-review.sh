@@ -151,6 +151,7 @@ silent_marker="/tmp/pr-${number}-silent"
 # is cleared here rather than left to the write below, so a stealth review of a
 # PR cannot make an ordinary review of that same PR quietly stealthy later.
 rm -f "$prior_json" "$since_diff" "$silent_marker" "/tmp/pr-${number}-drift.txt" \
+  "/tmp/pr-${number}-ticket.txt" \
   "/tmp/pr-${number}-conflict-fix.json" "/tmp/pr-${number}-conflict-fix.txt"
 
 # Start of the review, for the timings post-review.sh writes into its hidden
@@ -330,6 +331,13 @@ tickets="$(jq -r '(.title // "") + "\n" + (.body // "")' "$view" \
   | grep -oE 'atlassian\.net/browse/[A-Z][A-Z0-9]+-[0-9]+|github\.com/[^/ ]+/[^/ ]+/issues/[0-9]+|^\[[A-Z][A-Z0-9]+-[0-9]+\]' \
   | sed -E 's#.*/browse/##; s#^\[##; s#\]$##' | sort -u | paste -sd' ' - || true)"
 echo "linked ticket:     ${tickets:-none in the title or body}"
+# Jira over REST when credentials are set: a hard 30 s per ticket, where an MCP
+# call can hang for minutes (SKILL.md step 1 reads the file instead).
+jira_keys="$(tr ' ' '\n' <<<"$tickets" | grep -E '^[A-Z][A-Z0-9]+-[0-9]+$' | head -3 | paste -sd' ' - || true)"
+if [[ -n "$jira_keys" && -n "${JIRA_BASE_URL:-}" && -n "${JIRA_EMAIL:-}" && -n "${JIRA_API_TOKEN:-}" ]]; then
+  # shellcheck disable=SC2086 # one argument per key
+  python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/jira-ticket.py" "$number" $jira_keys || true
+fi
 jq -r --slurpfile view "$view" '
   ( [ .[] | "  inline  \(.user.login)  \(.path):\(.line // .original_line // "-")  \(.body | gsub("\n"; " ") | .[0:120])" ]
   + [ $view[0].reviews[]? | select((.body // "") != "")

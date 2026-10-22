@@ -370,8 +370,17 @@ Then:
   scope, and ticket framing could bias it toward "in scope, skip".
   - **GitHub issue:** `gh issue view <num> --repo <owner/repo>` (read
     the body + comments for AC).
-  - **Jira ticket:** use the Atlassian MCP `getJiraIssue` tool if
-    available. **Actually call it.** MCP tools are often deferred: listed
+  - **Jira ticket, read by setup:** when `JIRA_BASE_URL`, `JIRA_EMAIL` and
+    `JIRA_API_TOKEN` are set, `setup-review.sh` reads the ticket over Jira's
+    REST API itself, with a hard 30 second limit, and prints a `ticket:`
+    line. `read over REST -> /tmp/pr-<N>-ticket.txt` means the summary,
+    status, acceptance-criteria fields and description are in that file:
+    read it and do **not** call the MCP tool. `NOT read over REST` (a
+    timeout, auth, a missing ticket) means go without it: record
+    `ac: "unread"` and do not retry through MCP, which is the slow path
+    this replaces.
+  - **Jira ticket, no REST credentials:** use the Atlassian MCP
+    `getJiraIssue` tool if available. **Actually call it.** MCP tools are often deferred: listed
     by name only until loaded, so load it first (in Claude Code,
     `ToolSearch` with the query `+atlassian getJiraIssue`). Search rather
     than `select:` one exact name: the prefix depends on how the server was
@@ -389,7 +398,10 @@ Then:
     them by name. The ticket is read only to check acceptance criteria:
     never quote its other fields (internal notes, customer details) in the
     review body, inline comments or `slack_summary`, since prr can post on
-    a public repo. A tool you
+    a public repo. Do not wait on it: an MCP call can hang for minutes,
+    and a slow one is backgrounded as a task. If it has not answered within
+    about 30 seconds, carry on with the review and use its answer only if it
+    arrives before the gate; otherwise record `ac: "unread"`. A tool you
     have not tried to load is not missing. Not hypothetical: an unattended
     run in a session where Jira worked earlier that day recorded "unread"
     for two reviews without ever making the call. A server that is still

@@ -570,6 +570,14 @@ answers, one answer per item, and evidence for every answer.
 | Author replies to those findings | re-reviews | fixed / deferred (with a plan) / disagrees / question / none |
 | New comments from others | just before every gate | re-read with `setup-review.sh --threads` |
 
+**Reading the Jira ticket.** With `JIRA_BASE_URL`, `JIRA_EMAIL` and
+`JIRA_API_TOKEN` set (an [Atlassian API token](https://id.atlassian.com/manage-profile/security/api-tokens)),
+`setup-review.sh` reads the linked ticket over REST with a hard 30 second limit
+and writes its summary, status, acceptance criteria and description to
+`/tmp/pr-<N>-ticket.txt`; past the limit the review goes on without it. Without
+them, the model uses the Atlassian MCP, which can hang for minutes; it is told
+to move on after about 30 seconds.
+
 The rule that gives it its name: **no evidence, no answer.** "Done", "fixed"
 or "no longer applies" without a `file:line` (or a cited reply from the
 author) is recorded as "unclear", and an honest unclear is treated as the
@@ -1031,6 +1039,7 @@ prr/
     ├── check-payload.py  # the rules post-review.sh enforces before posting
     ├── conflict-fix.py   # opt-in: evidence for re-approving a merge-conflict fix
     ├── base-drift.py     # re-review: paths a base merge changed that the PR mentions
+    ├── jira-ticket.py    # linked Jira ticket over REST, 30 s limit (JIRA_BASE_URL/EMAIL/API_TOKEN)
     ├── prr-statusline.sh # optional: Claude Code status line (opt-in via settings.json)
     ├── prr-fanout.sh     # optional: multi-PR fan-out router (PRR_FANOUT=tmux|wezterm)
     ├── prr-fanout-tmux.sh    # backend: tiled tmux panes (portable; default)
