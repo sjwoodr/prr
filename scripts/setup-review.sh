@@ -328,8 +328,8 @@ EOF
 # the JSON: the linked ticket (step 1 reads its acceptance criteria) and who
 # already commented where (step 3 concurs instead of repeating them).
 tickets="$(jq -r '(.title // "") + "\n" + (.body // "")' "$view" \
-  | grep -oE 'atlassian\.net/browse/[A-Z][A-Z0-9]+-[0-9]+|github\.com/[^/ ]+/[^/ ]+/issues/[0-9]+|^\[[A-Z][A-Z0-9]+-[0-9]+\]' \
-  | sed -E 's#.*/browse/##; s#^\[##; s#\]$##' | sort -u | paste -sd' ' - || true)"
+  | grep -oE 'atlassian\.net/browse/[A-Z][A-Z0-9]+-[0-9]+|github\.com/[^/ ]+/[^/ ]+/issues/[0-9]+|^\[[A-Z][A-Z0-9]+-[0-9]+\]|^[A-Z][A-Z0-9]+-[0-9]+:' \
+  | sed -E 's#.*/browse/##; s#^\[##; s#\]$##; s#:$##' | awk '!seen[$0]++' | paste -sd' ' - || true)"
 echo "linked ticket:     ${tickets:-none in the title or body}"
 # Jira over REST when credentials are set: a hard 30 s per ticket, where an MCP
 # call can hang for minutes (SKILL.md step 1 reads the file instead).
