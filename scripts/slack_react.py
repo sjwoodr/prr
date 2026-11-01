@@ -6,6 +6,8 @@ Some teams post every PR as a one-liner to a chat channel (e.g. a Slack
 post and signals review progress on it:
 
   - when a review STARTS, an :eyes: reaction is added ("someone is reviewing");
+  - when it reaches the approval GATE, the :eyes: is removed (the work is done
+    and the gate may wait hours on the user);
   - when the review is POSTED, the :eyes: is removed, an outcome reaction is
     added (:white_check_mark: for an approval, :speech_balloon: for feedback),
     and a short plain-language reply is dropped in the post's thread.

@@ -139,7 +139,9 @@ good.
 skips just the `:eyes:` at start; strip it like `silent` and pass `--noeyes`
 to `setup-review.sh`. Everything else is a normal review: if the review posts,
 the outcome reaction and thread reply go out as usual. It is for reviews
-started unattended, which can wait at the gate for hours.
+started unattended, where nobody is there to see the review through. (The
+`:eyes:` comes off at the gate in every review, so waiting there is not the
+reason.)
 
 **Merge conflicts.** `setup-review.sh` refuses a PR that GitHub reports as
 conflicting with its base branch, before it creates anything: it prints why
@@ -871,8 +873,9 @@ is still running. See "The gate WAITS for Source B" in step 2.
 ~/.claude/skills/prr/scripts/setup-review.sh --threads <PR-url-or-number>
 ```
 
-It touches nothing but the comment artifact and lists what other people
-posted since this review started. A review takes minutes, and other
+It touches nothing but the comment artifact and the chat post's `:eyes:`
+(which it removes, since the review work is done and the gate may wait), and
+lists what other people posted since this review started. A review takes minutes, and other
 reviewers and bots post in that time: on one PR, Copilot raised the same
 finding as ours while the review was running, and the posted review missed
 the chance to concur. Fold anything new in by step 3's rules (concur, or say
@@ -1159,8 +1162,12 @@ chat channel, prr signals review progress on that post across the run:
   underway. Skipped when the review is silent: either `--silent` was passed, or
   the mode is self-review (your own PR posts nothing back, so there is no review
   signal worth showing the team). Those are one condition in the script, not two.
+- **Review reaches the gate** (`setup-review.sh --threads`, which step 5 and
+  R3 run just before showing the gate) -> removes the `:eyes:`. The review work
+  is done, and the gate may wait hours for an answer; a marker claiming someone
+  is reviewing would keep other reviewers away all that time.
 - **Review is posted** (`post-review.sh` with a payload) -> removes the
-  `:eyes:`, adds an outcome reaction, and drops a one-line plain-language reply
+  `:eyes:` again (a no-op unless something re-added it), adds an outcome reaction, and drops a one-line plain-language reply
   in the post's thread (from `slack_summary` in the payload):
   - **APPROVE** -> `:white_check_mark:`
   - **COMMENT** or **REQUEST_CHANGES** -> `:speech_balloon:` (has feedback to read)

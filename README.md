@@ -568,7 +568,7 @@ answers, one answer per item, and evidence for every answer.
 | Ticket acceptance criteria | every review with a linked Jira ticket or GitHub issue | done / partly / missing / unclear |
 | Earlier findings | re-reviews | fixed / partly / open / no longer applies / unclear |
 | Author replies to those findings | re-reviews | fixed / deferred (with a plan) / disagrees / question / none |
-| New comments from others | just before every gate | re-read with `setup-review.sh --threads` |
+| New comments from others | just before every gate | re-read with `setup-review.sh --threads` (which also clears the chat `:eyes:`) |
 
 **Reading the Jira ticket.** With `JIRA_BASE_URL`, `JIRA_EMAIL` and
 `JIRA_API_TOKEN` set (an [Atlassian API token](https://id.atlassian.com/manage-profile/security/api-tokens)),
@@ -687,6 +687,9 @@ the whole chat integration is opt-in already.
 If your team announces each PR in a chat channel (with the GitHub pull URL),
 `prr` can react on that post to mirror the review outcome:
 
+- review starts -> `:eyes:`
+- review reaches the approval gate -> `:eyes:` removed, so a run waiting on your
+  answer (say you are away from the keyboard) does not keep others from reviewing
 - APPROVE -> `:white_check_mark:`
 - COMMENT or REQUEST_CHANGES -> `:speech_balloon:`
 - nothing posted (gate declined, self-review, re-review report-only) -> no reaction

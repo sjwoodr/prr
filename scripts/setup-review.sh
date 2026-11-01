@@ -14,7 +14,8 @@
 #
 # --noeyes skips only the :eyes: at start. The outcome reaction and thread
 # reply still post if the review does. For a review started unattended, which
-# may sit at the approval gate for hours, so :eyes: would claim someone is on it.
+# has nobody there to see the review through. (:eyes: comes off at the gate in
+# every review, via --threads.)
 #
 # A PR with merge conflicts is refused (exit 4) before anything is created:
 # resolving them changes the code, so a review now would be spent again on the
@@ -24,6 +25,8 @@
 # inline comments and reviews, rewrites /tmp/pr-<N>-comments.json, and lists
 # what other people posted since this review started, so a comment that lands
 # mid-review (another reviewer, a bot, an author reply) is seen before the gate.
+# It also clears the :eyes: from the chat post, since it runs at the gate, when
+# the review work is done and the run may sit waiting for an answer.
 #
 # Author: Steve Woodruff (@sjwoodr)
 # SPDX-License-Identifier: MIT
@@ -114,6 +117,14 @@ if ((threads)); then
   else
     echo "  nothing new from anyone else"
   fi
+  # --threads runs just before every gate, so the review work is done: take
+  # the :eyes: off the chat post now rather than at post time. The gate can
+  # wait hours for an answer, and a marker saying "someone is reviewing this"
+  # in that time keeps other reviewers away. Unconditional, like post-review's
+  # clear_eyes: removing a reaction only takes a signal away, so it is safe
+  # under stealth, and a no-op without Slack configured or with no marker.
+  python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/slack_react.py" \
+    --repo "$repo" --number "$number" --unreact eyes || true
   exit 0
 fi
 
