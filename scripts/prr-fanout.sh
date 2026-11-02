@@ -22,6 +22,15 @@
 #                PRR_FANOUT=true and the legacy PRR_TMUX_FANOUT=true both mean tmux.
 #   PRR_FANOUT_COMMAND  the slash command each pane runs before the PR ref
 #                (default "/prr"), for skills layered on prr.
+#   PRR_AGENT_CLI  the agent binary each pane runs (default "claude"). Set it to
+#                another harness's CLI, e.g. "opencode".
+#   PRR_AGENT_ARGS extra argv spliced in before the quoted prompt, e.g.
+#                "--prompt" (pairs with PRR_AGENT_CLI=opencode). Both are
+#                validated below like PRR_FANOUT_COMMAND: they land inside a
+#                quoted shell string every backend runs, and the pane session
+#                must stay interactive, so an auto-approve or non-interactive
+#                flag (--auto, -p/--print, --dangerously-skip-permissions,
+#                opencode's `run` subcommand) is rejected.
 #   (PRR_FANOUT_TIMEOUT_MINS / PRR_FANOUT_GEOMETRY / PRR_FANOUT_TERMINAL are read
 #    by the backends; see their headers.)
 #
@@ -125,6 +134,26 @@ esac
 if [[ -n "${PRR_FANOUT_COMMAND:-}" && ! "$PRR_FANOUT_COMMAND" =~ ^/[A-Za-z0-9:_-]+(\ [A-Za-z0-9_-]+)*$ ]]; then
   echo "prr-fanout: PRR_FANOUT_COMMAND must be a slash command plus plain words (got '$PRR_FANOUT_COMMAND')." >&2; exit 2
 fi
+
+# PRR_AGENT_CLI / PRR_AGENT_ARGS feed the same quoted pane command, so both are
+# validated here, next to PRR_FANOUT_COMMAND. A stray quote, `;` or newline
+# would run something the user never asked for or break the generated pane
+# script; PRR_AGENT_CLI must also be a single bare token so every backend's
+# `command -v` guard checks the exact word the pane will run.
+if [[ -n "${PRR_AGENT_CLI:-}" && ! "$PRR_AGENT_CLI" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  echo "prr-fanout: PRR_AGENT_CLI must be a single command token (got '$PRR_AGENT_CLI')." >&2; exit 2
+fi
+if [[ -n "${PRR_AGENT_ARGS:-}" && ! "$PRR_AGENT_ARGS" =~ ^[A-Za-z0-9._,:=/@+-]+(\ [A-Za-z0-9._,:=/@+-]+)*$ ]]; then
+  echo "prr-fanout: PRR_AGENT_ARGS must be plain words and flags, no quotes or shell separators (got '$PRR_AGENT_ARGS')." >&2; exit 2
+fi
+# The fan-out's guarantee is that each pane STOPS at the approval gate and
+# waits for a person. An auto-approve or non-interactive flag defeats it (the
+# pane either exits unanswered or answers the gate itself), so reject the known
+# ones outright rather than trusting the user to remember.
+case " ${PRR_AGENT_ARGS:-} " in
+  *" -p "*|*" --print "*|*" --auto "*|*" --yes "*|*" -y "*|*" --yolo "*|*" --dangerously-skip-permissions "*|*" run "*)
+    echo "prr-fanout: PRR_AGENT_ARGS may not contain a non-interactive or auto-approve flag (offender in '$PRR_AGENT_ARGS'); every pane must stop at the approval gate." >&2; exit 2 ;;
+esac
 
 # Hand off to the selected backend. Export the normalized value so the backend's
 # own guard sees the canonical name regardless of which alias was used.

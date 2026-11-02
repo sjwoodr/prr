@@ -90,8 +90,8 @@ if [[ "${1:-}" == "test-mode" ]]; then TEST=1; shift; fi
 [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]] \
   || { echo "$TAG: no GUI session (DISPLAY/WAYLAND_DISPLAY unset); cannot open a window." >&2; exit 3; }
 command -v terminator >/dev/null 2>&1 || { echo "$TAG: terminator not on PATH." >&2; exit 3; }
-[[ "$TEST" -eq 1 ]] || command -v claude >/dev/null 2>&1 \
-  || { echo "$TAG: claude not on PATH." >&2; exit 3; }
+[[ "$TEST" -eq 1 ]] || command -v "${PRR_AGENT_CLI:-claude}" >/dev/null 2>&1 \
+  || { echo "$TAG: ${PRR_AGENT_CLI:-claude} not on PATH." >&2; exit 3; }
 
 timeout_mins="${PRR_FANOUT_TIMEOUT_MINS:-240}"
 REPO="$PWD"   # panes cd here so bare-number PRs resolve against the repo

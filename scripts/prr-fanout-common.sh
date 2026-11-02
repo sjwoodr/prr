@@ -44,7 +44,12 @@ pane_cmd() {
     if [[ "${PRR_FANOUT_FULL:-0}" == "1" ]]; then source_c="full ${source_c}"; fi
     # PRR_FANOUT_COMMAND (validated in prr-fanout.sh) lets a skill layered on
     # prr reuse the fan-out with its own slash command.
-    printf 'PRR_FANOUT_PANE=1 claude "%s %s%s%s"' "$cmd" "$silent" "$source_c" "$ref"
+    # PRR_AGENT_CLI names the agent binary each pane runs (default `claude`);
+    # PRR_AGENT_ARGS is spliced in before the quoted prompt, e.g.
+    # `PRR_AGENT_CLI=opencode PRR_AGENT_ARGS="run --agent build --auto"`.
+    local cli="${PRR_AGENT_CLI:-claude}" extra=""
+    [[ -n "${PRR_AGENT_ARGS:-}" ]] && extra=" ${PRR_AGENT_ARGS}"
+    printf 'PRR_FANOUT_PANE=1 %s%s "%s %s%s%s"' "$cli" "$extra" "$cmd" "$silent" "$source_c" "$ref"
   fi
 }
 

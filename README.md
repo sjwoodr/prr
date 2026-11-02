@@ -415,6 +415,16 @@ Tune (or opt out) via environment:
 - `PRR_FANOUT_COMMAND` — the slash command each pane runs before its PR ref;
   default `/prr`. Lets a skill layered on prr reuse the fan-out. Only a slash
   command plus plain words is accepted.
+- `PRR_AGENT_CLI` — the agent binary each pane runs; default `claude`. Set it
+  to another harness's CLI, e.g. `opencode`. Whatever it is, the command must
+  stay **interactive**: the fan-out depends on each pane stopping at the
+  approval gate and waiting for a person.
+- `PRR_AGENT_ARGS` — extra argv spliced in between the CLI and the quoted
+  prompt, e.g. `--prompt` (pairs with `PRR_AGENT_CLI=opencode`, so a pane runs
+  `opencode --prompt "/prr 1818"`). Both variables are validated like
+  `PRR_FANOUT_COMMAND` (plain words/flags only), and a non-interactive or
+  auto-approve flag (`--auto`, `-p`/`--print`, `--dangerously-skip-permissions`,
+  `opencode run`) is rejected, since any of those means nobody is at the gate.
 - `PRR_FANOUT_TIMEOUT_MINS` — global wall-clock cap on the run; default `240`
   (4h). `0` disables the cap (safe, since waiting is token-free). On timeout the
   launcher stops, reports which PRs are still open, and **leaves your in-progress
