@@ -64,17 +64,32 @@ holds `setup-review.sh`, `post-review.sh`, and `prr-fanout.sh`. Invoke each
 one **by its absolute path as a single bare statement** — no `cd`, no
 `export`, no leading variable assignment, no pipe. A compound command
 (`cd …; export …; …/script`) or a leading `VAR=… …/script` prefix cannot be
-statically analyzed, so Claude Code's permission allow-list never matches it
-and you get an approval prompt every run; a single bare
+statically analyzed, so a permission allow-list never matches it and you get
+an approval prompt every run; a single bare
 `<base-dir>/scripts/<script>.sh …` matches the allow-list and runs
 unprompted. The scripts self-locate their own siblings, so no environment
-setup is needed.
+setup is needed. On a harness with no allow-list (shell allowed by default)
+the bare form costs nothing and keeps the call auditable, so use it anyway.
 
 The command examples below are written for the default Claude Code install
 location, `~/.claude/skills/prr`. If the base directory at the top of this
 prompt is different (e.g. a Cursor install at `~/.cursor/skills/prr`, or a
 project-local `.cursor/skills/prr`), use that path instead of
 `~/.claude/skills/prr` in every command below — the rest is identical.
+
+**Harnesses.** The workflow is harness-neutral; only four things change.
+OpenCode discovers this skill from `~/.claude/skills` as-is, so no install
+step is needed there either.
+
+| | Claude Code | OpenCode |
+|---|---|---|
+| launch the security agent | `Task` tool, `subagent_type`, `run_in_background: true` | `subagent` tool with the agent ID; background is a property of the call |
+| always-available fallback | `general-purpose` | `general` |
+| MCP tool name | `mcp__<server>__<tool>` | `<server>_<tool>` |
+| deferred tool lookup | `ToolSearch` | not needed; MCP tools are listed directly |
+
+A `codebase-analyst` agent exists in both if you install one; the names in
+this file are agent types, not harness features.
 
 **Three modes.** Step 1 detects which one applies:
 
@@ -188,7 +203,9 @@ Throughout this workflow:
   `/tmp/pr-<N>-wt/...` path. Do NOT use `cd /tmp/pr-<N>-wt/... && ls && cat`
   style compound commands: Claude Code applies a built-in "compound command
   contains `cd`" guard that forces a manual approval prompt on every such
-  call and is NOT silenceable via the permissions allow-list. Reading by
+  call and is NOT silenceable via the permissions allow-list. (Other
+  harnesses may not have the guard; reading by absolute path is the right
+  shape regardless.) Reading by
   absolute path avoids the prompt entirely and Read gives line numbers for
   the `file:line` citations step 3 needs.
 - **Do not run lint, type checks, or test suites. Read CI instead.** A review
@@ -230,7 +247,7 @@ Throughout this workflow:
 - **Run the bundled scripts bare — never pipe them through `tee`.** Invoke
   `setup-review.sh` and `post-review.sh` exactly as documented, with no
   `2>&1 | tee /tmp/...` wrapper. Piping turns the call into a pipeline, and
-  Claude Code matches each pipeline segment against the allow-list
+  the harness matches each pipeline segment against the allow-list
   separately: the `tee` segment is not allow-listed, so the whole call
   prompts even though the script itself is allowed. There is also nothing to
   capture — both scripts already write their re-readable artifacts to `/tmp`
@@ -272,6 +289,17 @@ three checks:
 3. **A backend is resolvable** — `PRR_FANOUT` names a backend (`tmux` /
    `wezterm` / `terminator`), OR `PRR_FANOUT` is unset and `tmux` is on `PATH`
    (the default backend).
+
+Each pane runs the agent CLI named by `PRR_AGENT_CLI` (default `claude`).
+On another harness, set it once in the environment before fanning out:
+
+```bash
+export PRR_AGENT_CLI=opencode
+export PRR_AGENT_ARGS="run --agent build --auto"
+```
+
+`PRR_AGENT_ARGS` is spliced in before the quoted `/prr <ref>` prompt, so the
+pane ends up running `opencode run --agent build --auto "/prr 1818"`.
 
 - **If all three hold** — hand the whole batch to the fan-out router and do not
   review the PRs yourself. Run it **in the background** (`run_in_background:
@@ -384,11 +412,13 @@ Then:
   - **Jira ticket, no REST credentials:** use the Atlassian MCP
     `getJiraIssue` tool if available. **Actually call it.** MCP tools are often deferred: listed
     by name only until loaded, so load it first (in Claude Code,
-    `ToolSearch` with the query `+atlassian getJiraIssue`). Search rather
+    `ToolSearch` with the query `+atlassian getJiraIssue`; OpenCode lists
+    MCP tools directly, so just call it). Search rather
     than `select:` one exact name: the prefix depends on how the server was
     connected - `mcp__atlassian__getJiraIssue` for the standalone Atlassian
     MCP, `mcp__claude_ai_Atlassian_Rovo__getJiraIssue` for the Atlassian
-    Rovo connector on claude.ai - and a `select:` with the wrong prefix
+    Rovo connector on claude.ai, `atlassian_getJiraIssue` on OpenCode - and
+    a `select:` with the wrong prefix
     finds nothing. Keep the `+atlassian`: it requires the vendor in the
     tool name, so a `getJiraIssue` on some other connected server is never
     sent the ticket key and site URL. Either way the tool requires `cloudId`: the ticket's site URL
@@ -474,10 +504,12 @@ time; the two passes must overlap.
   IAM and infrastructure permission changes, and test gaps on
   security-relevant paths. Use the `codebase-analyst` agent type when it
   is in this environment's available-agents list; if it is not (only the
-  built-ins are registered), fall back to `general-purpose`, which is
-  always available and can read and audit, not just locate code. Do not
-  use `Explore` for this — it only finds code, it does not review it.
-  Spawn it once, with `run_in_background: true`, immediately after step 1.
+  built-ins are registered), fall back to `general-purpose` on Claude Code
+  or `general` on OpenCode — both are always available and can read and
+  audit, not just locate code. Do not use `Explore`/`explore` for this —
+  it only finds code, it does not review it. Spawn it once, in the
+  background, immediately after step 1: `run_in_background: true` on
+  Claude Code's `Task`, the background form of OpenCode's `subagent`.
   Give it the diff path, the PR description, and the worktree path
   `/tmp/pr-<N>-wt` so it can read surrounding code. A bare diff plus
   worktree is enough — do not delay the spawn to hand-feed it findings or

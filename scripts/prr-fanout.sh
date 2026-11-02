@@ -22,6 +22,10 @@
 #                PRR_FANOUT=true and the legacy PRR_TMUX_FANOUT=true both mean tmux.
 #   PRR_FANOUT_COMMAND  the slash command each pane runs before the PR ref
 #                (default "/prr"), for skills layered on prr.
+#   PRR_AGENT_CLI  the agent binary each pane runs (default "claude"). Set it to
+#                another harness's CLI, e.g. "opencode".
+#   PRR_AGENT_ARGS extra argv spliced in before the quoted prompt, e.g.
+#                "run --agent build --auto" (pairs with PRR_AGENT_CLI=opencode).
 #   (PRR_FANOUT_TIMEOUT_MINS / PRR_FANOUT_GEOMETRY / PRR_FANOUT_TERMINAL are read
 #    by the backends; see their headers.)
 #
