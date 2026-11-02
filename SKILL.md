@@ -86,7 +86,11 @@ step is needed there either.
 | launch the security agent | `Task` tool, `subagent_type`, `run_in_background: true` | `subagent` tool with the agent ID; background is a property of the call |
 | always-available fallback | `general-purpose` | `general` |
 | MCP tool name | `mcp__<server>__<tool>` | `<server>_<tool>` |
-| deferred tool lookup | `ToolSearch` | not needed; MCP tools are listed directly |
+| deferred tool lookup | `ToolSearch` | none by default: under Code Mode (on) a server's tools are reached inside `execute` as `tools.<server>.<tool>`; set `codemode: false` on the server to list them as native tools instead |
+
+The OpenCode column reflects v2 (checked against v2.2.5, 2026-11-02). V1 uses
+`task` instead of `subagent` and the MCP/doc shapes quoted in step 4 differ —
+adjust the names before following this file on v1.
 
 A `codebase-analyst` agent exists in both if you install one; the names in
 this file are agent types, not harness features.
@@ -291,15 +295,28 @@ three checks:
    (the default backend).
 
 Each pane runs the agent CLI named by `PRR_AGENT_CLI` (default `claude`).
-On another harness, set it once in the environment before fanning out:
+Whatever the value is, the command the pane runs **must stay interactive**: the
+fan-out depends on each pane being a session that stops at the step 5 gate and
+waits for a person. A non-interactive mode either exits at the gate (findings
+lost, the pane gone, the launcher idles to the timeout) or, worse, carries a
+flag like `--auto`/`--yes`/`-p` that answers the gate itself — do not configure
+one, and `prr-fanout.sh` rejects `--auto` in `PRR_AGENT_ARGS`.
+
+These are **user setup, not agent work**: the expert agent must not `export`
+them (see the compound-command rule at the top of this file) or pick the pane's
+flags itself. Set them in your shell profile or harness environment **before**
+invoking the skill. On OpenCode the right shape is the interactive TUI seeded
+with the prompt, not `opencode run` (which is explicitly non-interactive):
 
 ```bash
+# in your shell profile / env config — not something the agent should run
 export PRR_AGENT_CLI=opencode
-export PRR_AGENT_ARGS="run --agent build --auto"
+export PRR_AGENT_ARGS="--prompt"
 ```
 
-`PRR_AGENT_ARGS` is spliced in before the quoted `/prr <ref>` prompt, so the
-pane ends up running `opencode run --agent build --auto "/prr 1818"`.
+`PRR_AGENT_ARGS` sits between the CLI and the quoted `/prr <ref>` prompt, so
+the pane ends up running `opencode --prompt "/prr 1818"` — a live session a
+person reviews at the gate, the same guarantee a `claude` pane gives.
 
 - **If all three hold** — hand the whole batch to the fan-out router and do not
   review the PRs yourself. Run it **in the background** (`run_in_background:
@@ -412,14 +429,16 @@ Then:
   - **Jira ticket, no REST credentials:** use the Atlassian MCP
     `getJiraIssue` tool if available. **Actually call it.** MCP tools are often deferred: listed
     by name only until loaded, so load it first (in Claude Code,
-    `ToolSearch` with the query `+atlassian getJiraIssue`; OpenCode lists
-    MCP tools directly, so just call it). Search rather
+    `ToolSearch` with the query `+atlassian getJiraIssue`). Search rather
     than `select:` one exact name: the prefix depends on how the server was
     connected - `mcp__atlassian__getJiraIssue` for the standalone Atlassian
     MCP, `mcp__claude_ai_Atlassian_Rovo__getJiraIssue` for the Atlassian
-    Rovo connector on claude.ai, `atlassian_getJiraIssue` on OpenCode - and
-    a `select:` with the wrong prefix
-    finds nothing. Keep the `+atlassian`: it requires the vendor in the
+    Rovo connector on claude.ai - and a `select:` with the wrong prefix
+    finds nothing. Under Code Mode (OpenCode's default) the server's tools
+    surface inside `execute` as `tools.<server>.<tool>` (setting
+    `codemode: false` on the server lists them as native tools instead);
+    only call a `getJiraIssue` reached through an Atlassian-named server
+    either way. Keep the `+atlassian`: it requires the vendor in the
     tool name, so a `getJiraIssue` on some other connected server is never
     sent the ticket key and site URL. Either way the tool requires `cloudId`: the ticket's site URL
     (`https://<site>.atlassian.net`) is accepted as-is; for a bare
