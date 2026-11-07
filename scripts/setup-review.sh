@@ -218,7 +218,25 @@ head_sha="$(git -C "$wt" rev-parse HEAD)"
 gh pr view "$number" --repo "$repo" \
   --json number,title,state,headRefName,baseRefName,baseRefOid,reviewDecision,author,files,reviews,comments,body \
   > "$view"
-gh pr diff "$number" --repo "$repo" > "$diff"
+# GitHub refuses diffs over 20,000 lines (HTTP 406); build it locally then.
+if ! diff_err="$(gh pr diff "$number" --repo "$repo" 2>&1 >"$diff")"; then
+  echo "diff: gh pr diff failed (${diff_err%%$'\n'*}); building it locally from git" >&2
+  base_oid="$(jq -r .baseRefOid "$view")"
+  git -C "$wt" cat-file -e "${base_oid}^{commit}" 2>/dev/null \
+    || "${fetch[@]}" ${depth[@]+"${depth[@]}"} "$base_oid"
+  # Diff from the merge base, as GitHub does. A shallow clone may not reach it,
+  # and diffing against the base tip would show the base's later changes reversed.
+  if ! merge_base="$(git -C "$wt" merge-base "$base_oid" HEAD 2>/dev/null)" \
+    && [[ "$(git -C "$wt" rev-parse --is-shallow-repository)" == true ]]; then
+    "${fetch[@]}" --unshallow "$base_oid" 2>/dev/null || true
+    merge_base="$(git -C "$wt" merge-base "$base_oid" HEAD 2>/dev/null)" || true
+  fi
+  if [[ -z "$merge_base" ]]; then
+    echo "diff: no merge base found; diffing against the base tip, which may include the base's own later changes" >&2
+    merge_base="$base_oid"
+  fi
+  git -C "$wt" diff "$merge_base" HEAD > "$diff"
+fi
 gh api --paginate "repos/${repo}/pulls/${number}/comments" > "$comments"
 gh api --paginate "repos/${repo}/pulls/${number}/reviews"  > "$reviews"
 
