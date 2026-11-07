@@ -744,7 +744,9 @@ Then verify, before anything reaches step 3:
 - Every quantified claim, against the set its `evidence` names.
 
 `read-the-code` findings carrying real evidence still get spot-checked, but
-they are not where the errors are.
+they are not where the errors are. A self-review's Source C may also mark a
+finding `probed`, with the command and its output as evidence: check the
+command tested what the finding claims, and re-run it when it is cheap.
 
 If the block is missing or does not parse, do NOT re-run the agent: read the
 prose and verify more of it by hand. The contract speeds up synthesis, it is
@@ -780,6 +782,14 @@ Start its clock, then launch it right after Source B, before Source A:
   text (with `{{N}}` replaced) as its prompt. No extra cost, runs in
   parallel. It shares more blind spots with you than an outside model does,
   which is the user's trade to make.
+  **On a self-review** (`MODE: self-review`), append the text of
+  `~/.claude/skills/prr/scripts/source-c-probes.md` (with `{{N}}` replaced)
+  to the prompt, and set the subagent's effort to `xhigh` if your agent tool
+  takes one. The addendum lets it run probes in its own checkout instead of
+  only reading, because a reading pass shares the author's assumptions.
+  Probing takes longer, so run its `c-check` with
+  `PRR_SOURCE_C_TIMEOUT=${PRR_SOURCE_C_TIMEOUT:-2400}`. Every other mode
+  keeps the plain read-only brief.
 - **Any other model** (`ollama/glm-5.3:cloud`, a local model): run
   `~/.claude/skills/prr/scripts/source-c.sh --bg <N> <model>`. It runs the
   model read-only in pi, opencode or codex (`PRR_PASS_HARNESS`, else the
@@ -787,7 +797,9 @@ Start its clock, then launch it right after Source B, before Source A:
   stamps `c-done` only for a real report; an empty or seconds-long run is
   recorded as a failure, not a return. No harness, an unknown model or a
   refused one: record `failed`, say so at the gate, carry on. Name the
-  harness in the Sources line (`C glm-5.3 via pi, 412 s`).
+  harness in the Sources line (`C glm-5.3 via pi, 412 s`). These harnesses
+  are read-only, so a self-review's probe addendum does not apply: say at
+  the gate that Source C did not probe.
 
 The gate waits for Source C exactly as for Source B, with its own budget:
 `source-b-clock.sh c-check <PR-number>` (`PRR_SOURCE_C_TIMEOUT`, default 900

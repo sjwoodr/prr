@@ -270,7 +270,18 @@ It pays off most on a self-review, where Source A shares the author's
 assumptions. It costs about as much as Source B, so it is opt-in everywhere
 by default. `export PRR_SELF_REVIEW_C=opus` (or any model) runs it on every
 self-review without asking; add `noC` to skip it for one run. On anyone
-else's PR it stays opt-in. Pick the model per review:
+else's PR it stays opt-in.
+
+On a self-review with a Claude model, Source C also probes instead of only
+reading (`scripts/source-c-probes.md`), at `xhigh` effort with a 40-minute
+budget. In its own throwaway checkout it reverts each new test's production
+line and runs the test, runs it on empty input, searches the repo for other
+instances of the mechanism the change fixes, and builds small fixtures for
+risky inputs. A pass that only reads the author's own PR tends to share the
+author's assumptions; running things is what finds the sibling bug and the
+test that cannot fail. Non-Claude models run read-only, so they skip this.
+
+Pick the model per review:
 
 ```bash
 /prr C=sonnet 1880                        # a Claude model: a subagent, no extra cost
@@ -1048,6 +1059,7 @@ prr/
     ├── source-b.sh       # Source B in an outside harness, for harnesses with no subagent tool
     ├── source-c.sh       # opt-in Source C in pi, opencode or codex (non-Claude models)
     ├── source-c-brief.md # Source C's brief, shared by the pi and subagent paths
+    ├── source-c-probes.md # self-review addendum: probes for the Claude subagent path
     ├── pass-common.sh    # shared read-only runner (pi, opencode, codex) for source-b.sh and source-c.sh
     ├── check-payload.py  # the rules post-review.sh enforces before posting
     ├── conflict-fix.py   # opt-in: evidence for re-approving a merge-conflict fix
