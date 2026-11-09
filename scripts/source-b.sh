@@ -43,6 +43,11 @@ wt="/tmp/pr-${number}-wt"
 diff="/tmp/pr-${number}-diff.txt"
 view="/tmp/pr-${number}-view.json"
 
+# The areas and finding rules follow source-c-brief.md's. Measured 2026-11-09
+# with gpt-oss 120b on one PR: a shorter brief (topics and "verify before you
+# report" only) gave three blockers, none real (a fail-closed path called a
+# bypass, a cache that exists called missing, "tests pass" with no shell); this
+# one gave none in three runs and covered every area.
 brief="You are Source B in a pull request review: a security-focused deep
 pass. Read only; do not modify files or run tests.
 
@@ -50,16 +55,49 @@ pass. Read only; do not modify files or run tests.
 - PR description: the body field of $view
 - Full checkout of the PR head: $wt (read surrounding code there by absolute path)
 
-Look for: cross-tenant and isolation gaps, auth and role mistakes, secrets,
-blast radius, error handling, IAM or infrastructure permission changes, and
-tests on security-relevant paths that became vacuous (would still pass with the
-production behaviour broken) or lost a case, role or assertion.
+Work through every area below. For each one, report findings or add a
+cleared entry saying what you checked and why it holds; an area that does not
+apply gets one cleared entry saying so. Skipping an area silently is the one
+wrong answer.
 
-Verify before you report: for every finding, open the code that proves it and
-quote the lines in evidence. A claim about every/all/none/only must name the
-members you enumerated. No evidence, no finding; an empty list is a fine answer.
+1. Reach: who and what can call the changed code (HTTP, direct invoke, queue,
+   schedule), and what they control in its input.
+2. Authorisation on every path: each way through the changed code, including
+   error and fallback paths. Does every path that should refuse actually
+   refuse (fail closed)? Does any path skip a check?
+3. Isolation: tenant, account or environment boundaries the change touches.
+   Can one tenant's request reach another's data or secrets?
+4. Secrets and configuration: what is read, from where, what gets logged, and
+   what a missing or malformed value does.
+5. Permissions and infrastructure: IAM, roles, policies, network or resource
+   changes in the diff, and anything broader than the code needs.
+6. Tests on security paths: for each test the change adds or edits, name the
+   production line it pins and say whether reverting that line would make it
+   fail. A test that would still pass, or that lost a case, role or assertion,
+   is a finding.
 
-End your reply with a fenced json block, exactly this shape:
+Rules for a finding:
+
+- It must be on a line the diff changes, or be something a changed line
+  breaks. A problem in code the PR does not touch is out of scope.
+- Give a concrete failure_scenario: the input or sequence of events, and the
+  wrong outcome. If the scenario ends with the code refusing, returning false
+  or throwing as intended, that is the code working, not a finding.
+- Before calling something missing (a check, a cache, a permission, a test),
+  search for it and say in evidence where you looked.
+- A claim that the change made something worse must compare against the old
+  code: the - lines of the diff.
+- A claim about every/all/none/only must name the members you enumerated.
+- You cannot run anything. Never say tests or builds pass or fail; say what
+  you could not verify instead.
+- Severity: blocker only when merging causes a concrete wrong outcome you
+  described; notable for a real problem with a narrower or less likely impact;
+  nit for the rest. 'May', 'could' and 'if a future change' are nits at most.
+- Open the code that proves it and quote the lines in evidence. No evidence,
+  no finding; an empty list is a fine answer.
+
+End your reply with a fenced json block, exactly this shape. Prefix each
+title with its area number, e.g. \"[2] ...\".
 {\"findings\":[{\"severity\":\"blocker | notable | nit\",\"title\":\"\",\"file\":\"path under $wt\",\"line\":0,\"failure_scenario\":\"\",\"fix\":\"\",\"verified\":\"read-the-code | inferred-from-diff | assumption\",\"evidence\":\"\"}],\"cleared\":[{\"claim\":\"\",\"evidence\":\"\"}]}"
 
 pass_run source-b "$number" "$model" "$brief" "/tmp/pr-${number}-source-b.md" b-done || exit 1
