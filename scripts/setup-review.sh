@@ -161,9 +161,15 @@ silent_marker="/tmp/pr-${number}-silent"
 # Stale artifacts from an earlier run would mislead the skill. The silent marker
 # is cleared here rather than left to the write below, so a stealth review of a
 # PR cannot make an ordinary review of that same PR quietly stealthy later.
+# An abandoned run's pass reports go too: an agent looking for this review's
+# Source B found one holding only an earlier run's login error, and took it for
+# this run's. Setup never runs while a pass is writing one (re-runs happen
+# before the passes start, or at the gate after they end).
 rm -f "$prior_json" "$since_diff" "$silent_marker" "/tmp/pr-${number}-drift.txt" \
   "/tmp/pr-${number}-ticket.txt" \
-  "/tmp/pr-${number}-conflict-fix.json" "/tmp/pr-${number}-conflict-fix.txt"
+  "/tmp/pr-${number}-conflict-fix.json" "/tmp/pr-${number}-conflict-fix.txt" \
+  "/tmp/pr-${number}-source-b.md" "/tmp/pr-${number}-source-b.log" \
+  "/tmp/pr-${number}-source-c.md" "/tmp/pr-${number}-source-c.log"
 
 # Start of the review, for the timings post-review.sh writes into its hidden
 # meta marker. Kept across a re-run on a moved head (same review), but a stamp
