@@ -247,6 +247,11 @@ For calibration, agent runs on real PRs have landed between roughly 100 and
 except the wait itself; lowering it below about 300 makes single-source reviews
 routine, which defeats the point of having two passes.
 
+**Source B's model** (`PRR_SOURCE_B_MODEL`). Unset, Source B runs on its agent
+type's own model. `export PRR_SOURCE_B_MODEL=sonnet` runs it on a cheaper one:
+B reads code against known patterns, and Source A still verifies everything it
+reports. Setup prints the model it will use on a `source B model:` line.
+
 **Opt-in Source C** (`/prr C <PR>`, `PRR_SOURCE_C_MODEL`)
 
 Source A reads the diff for correctness and Source B hunts security problems,

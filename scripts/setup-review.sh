@@ -352,6 +352,11 @@ EOF
 if [[ -n "$forced_full" ]]; then
   echo "  forced full:     yes, your earlier review ($forced_full) is ignored"
 fi
+# Source B's model, printed so the spawn need not read the environment
+# (SKILL.md step 2). Re-review runs no sources.
+if [[ "$mode" != "re-review" ]]; then
+  echo "  source B model:  ${PRR_SOURCE_B_MODEL:-agent default (set PRR_SOURCE_B_MODEL to override)}"
+fi
 cat <<EOF
 artifacts:
   view json:       $view

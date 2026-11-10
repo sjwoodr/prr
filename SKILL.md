@@ -529,6 +529,11 @@ time; the two passes must overlap.
   it only finds code, it does not review it. Spawn it once, in the
   background, immediately after step 1: `run_in_background: true` on
   Claude Code's `Task`, the background form of OpenCode's `subagent`.
+  **Model:** when setup's `source B model:` line names one (it comes from
+  `$PRR_SOURCE_B_MODEL`), pass it as the spawn's model override (`model` on
+  Claude Code's `Agent`/`Task`); otherwise the agent type's own model runs.
+  B reads code against known patterns, so a cheaper model (`sonnet`) does
+  the job; Source A, which verifies every source's findings, stays on yours.
   Give it the diff path, the PR description, and the worktree path
   `/tmp/pr-<N>-wt` so it can read surrounding code. A bare diff plus
   worktree is enough — do not delay the spawn to hand-feed it findings or
