@@ -1116,6 +1116,10 @@ containing:
   `skipped-prose`, `failed`, `stubbed` or `timeout` (a re-review may omit
   it). It is stripped from the posted body and recorded in the hidden
   `prr-meta` marker, so report it honestly.
+- `source_b_model` — optional; the model Source B ran on, as passed to its
+  spawn (setup's `source B model:` line). Recorded as `b_model` in
+  `prr-meta` and stripped. Left out, the post script uses
+  `$PRR_SOURCE_B_MODEL` when B ran, and records nothing when that is unset.
 - `source_c` and `source_c_model` — only when Source C was asked for: its
   outcome (`returned`, `failed`, `stubbed`, `timeout`, `skipped-prose` or
   `no-model`) and the model name as given. Stripped and recorded like

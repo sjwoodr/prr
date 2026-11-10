@@ -356,6 +356,15 @@ case "$source_b" in
   returned|skipped-prose|rereview|failed|stubbed|timeout) ;;
   *) source_b="unknown" ;;
 esac
+# Source B's model: the payload's source_b_model, else PRR_SOURCE_B_MODEL when
+# B ran (setup's "source B model:" line comes from the same variable). Absent
+# when neither names one, so older markers stay unchanged. Cut to a safe
+# charset like c_model: it lands inside an HTML comment.
+b_model="$(jq -r '.source_b_model // empty' "$payload")"
+case "$source_b" in
+  returned|failed|stubbed|timeout) b_model="${b_model:-${PRR_SOURCE_B_MODEL:-}}" ;;
+esac
+b_model="$(printf '%s' "$b_model" | tr -cd 'A-Za-z0-9._:/-' | cut -c1-60)"
 now="$(date +%s)"
 # Source C is opt-in, so its fields appear only when it was asked for, keeping
 # every older review's marker unchanged. The model name is cut to a safe
@@ -419,13 +428,13 @@ if [[ "$(git -C "$prr_root" rev-parse --show-toplevel 2>/dev/null)" == "$prr_roo
     version="${version}+"
   fi
 fi
-meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b} fanout=${fanout}${trigger:+ trigger=$trigger}${reapproved:+ reapproved=$reapproved}${cf:+ $cf} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} gate_s=$(since "$t0" "$gate") wait_s=$(since "$gate" "$now") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
+meta="<!-- prr-meta ${version:+v=$version }mode=${mode} source_b=${source_b}${b_model:+ b_model=$b_model} fanout=${fanout}${trigger:+ trigger=$trigger}${reapproved:+ reapproved=$reapproved}${cf:+ $cf} a_s=$(since "$t0" "$(stamp a-done)") b_s=$(since "$(stamp sourceb-started)" "$(stamp b-done)")${source_c_meta} gate_s=$(since "$t0" "$gate") wait_s=$(since "$gate" "$now") total_s=$(since "$t0" "$now")${checks:+ $checks} -->"
 
 # Thread replies (payload `replies`: [{in_reply_to, body}]) are posted after
 # the review, in the existing threads; they are never part of the review.
 replies="$(jq -c '[.replies // [] | .[] | select((.in_reply_to | type) == "number" and ((.body // "") != ""))]' "$payload")"
 
-jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_c, .source_c_model, .source_c_counts, .prior, .ac, .author_replies, .replies, .reapproved, .conflict_fix)
+jq --arg meta "$meta" 'del(.slack_summary, .source_b, .source_b_model, .source_c, .source_c_model, .source_c_counts, .prior, .ac, .author_replies, .replies, .reapproved, .conflict_fix)
     | if ((.body // "") | contains("<!-- prr -->")) then .
       else .body = ((.body // "") + "\n\n<!-- prr -->") end
     | if ((.body // "") | contains("<!-- prr-meta ")) then .
