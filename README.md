@@ -273,9 +273,10 @@ lenses, and each must end in a finding or a note of what was checked:
 
 It pays off most on a self-review, where Source A shares the author's
 assumptions. It costs about as much as Source B, so it is opt-in everywhere
-by default. `export PRR_SELF_REVIEW_C=opus` (or any model) runs it on every
-self-review without asking; add `noC` to skip it for one run. On anyone
-else's PR it stays opt-in.
+by default. `export PRR_SOURCE_C_SELF_REVIEW=on` runs it on every self-review
+without asking, on `PRR_SOURCE_C_MODEL` (which `/prr C <PR>` also uses); add
+`noC` to skip it for one run. On anyone else's PR it stays opt-in. The old
+`PRR_SELF_REVIEW_C=<model>` still works when the new setting is unset.
 
 On a self-review with a Claude model, Source C also probes instead of only
 reading (`scripts/source-c-probes.md`), at `xhigh` effort with a 40-minute

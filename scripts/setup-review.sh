@@ -352,10 +352,11 @@ EOF
 if [[ -n "$forced_full" ]]; then
   echo "  forced full:     yes, your earlier review ($forced_full) is ignored"
 fi
-# Source B's model, printed so the spawn need not read the environment
+# Each source's model, printed so the spawn need not read the environment
 # (SKILL.md step 2). Re-review runs no sources.
 if [[ "$mode" != "re-review" ]]; then
   echo "  source B model:  ${PRR_SOURCE_B_MODEL:-agent default (set PRR_SOURCE_B_MODEL to override)}"
+  echo "  source C model:  ${PRR_SOURCE_C_MODEL:-none set (C=<model> picks one, or set PRR_SOURCE_C_MODEL)}"
 fi
 cat <<EOF
 artifacts:
@@ -425,14 +426,26 @@ self-review context:
   pr author:       $pr_author (you)
   posting:         disabled — report findings to the user only, post nothing
 EOF
-  # PRR_SELF_REVIEW_C=<model> runs Source C on every self-review, where the
-  # author's own assumptions and PR description are what it attacks. Unset, it
-  # stays opt-in: a third pass costs about as much as Source B.
-  self_c="${PRR_SELF_REVIEW_C:-}"
-  case "$self_c" in
-    ""|off|none|false|0) echo "  source C:        opt-in (set PRR_SELF_REVIEW_C=<model> to run it on every self-review)" ;;
-    *)                   echo "  source C:        on by default, model $self_c (noC to skip)" ;;
+  # PRR_SOURCE_C_SELF_REVIEW=on runs Source C, on PRR_SOURCE_C_MODEL, on every
+  # self-review, where the author's own assumptions and PR description are what
+  # it attacks. Unset, it stays opt-in: a third pass costs about as much as
+  # Source B. PRR_SELF_REVIEW_C=<model> is the old name; it still works when
+  # the new one is unset.
+  self_c_on="$(printf '%s' "${PRR_SOURCE_C_SELF_REVIEW:-}" | tr '[:upper:]' '[:lower:]')"
+  legacy_c="${PRR_SELF_REVIEW_C:-}"
+  case "$legacy_c" in off|none|false|0) legacy_c="" ;; esac
+  self_c=""
+  case "$self_c_on" in
+    1|on|true|yes) self_c="${PRR_SOURCE_C_MODEL:-$legacy_c}" ;;
+    "")            self_c="$legacy_c" ;;
   esac
+  if [[ -n "$self_c" ]]; then
+    echo "  source C:        on by default, model $self_c (noC to skip)"
+  elif [[ "$self_c_on" =~ ^(1|on|true|yes)$ ]]; then
+    echo "  source C:        opt-in (PRR_SOURCE_C_SELF_REVIEW is on, but PRR_SOURCE_C_MODEL is unset)"
+  else
+    echo "  source C:        opt-in (set PRR_SOURCE_C_SELF_REVIEW=on to run it on every self-review)"
+  fi
 fi
 
 # Two different reasons to send the team no Slack signal, and they turn out to

@@ -174,7 +174,8 @@ reviews it anyway; strip it like `silent` and pass `--allow-conflicts`.
 (`/prr C 1880`, `/prr silent C=sonnet 1880`) adds a
 consequences pass (what the change does after it merges, outside the changed
 lines) from a model of the user's choosing, alongside Source B. Strip the keyword before going further, like `silent`. The model is
-`C=<model>` if given, else `$PRR_SOURCE_C_MODEL`; with neither, say once
+`C=<model>` if given, else `$PRR_SOURCE_C_MODEL` (setup prints it on its
+`source C model:` line); with neither, say once
 that Source C was asked for but has no model, record `source_c: "no-model"`,
 and carry on dual-source. Off unless asked for, every time: an outside model
 costs money per review and receives the diff. It composes with every other
@@ -185,7 +186,8 @@ pass on a reworked PR.
 
 **A self-review can turn Source C on by default.** When `setup-review.sh`
 reports `MODE: self-review`, it also prints a `source C:` line. If it says
-`on by default, model <m>` (the user set `PRR_SELF_REVIEW_C=<m>`), run Source
+`on by default, model <m>` (the user set `PRR_SOURCE_C_SELF_REVIEW=on` with
+`PRR_SOURCE_C_MODEL=<m>`, or the old `PRR_SELF_REVIEW_C=<m>`), run Source
 C with model `<m>` exactly as if the user had typed `C=<m>`, unless the
 arguments contain `noC` (strip it like any keyword) or an explicit
 `C=<model>`, which wins. If it says `opt-in`, treat `C` as usual. Every other
@@ -772,7 +774,7 @@ is not given the ticket, for the same reason as Source B.
 
 It earns most on a **self-review**: Source A shares the author's assumptions,
 and the PR body Source C attacks is the author's own. That is why
-`PRR_SELF_REVIEW_C` can make a self-review run it by default (see "A
+`PRR_SOURCE_C_SELF_REVIEW` can make a self-review run it by default (see "A
 self-review can turn Source C on by default" near the top).
 
 Start its clock, then launch it right after Source B, before Source A:
