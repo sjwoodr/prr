@@ -804,6 +804,11 @@ layouts but not all, so it is included, but only when it fits whole within the
 cap: it is the first thing left off, and never a reason to trim the path. It is
 also left off when the status blob has no `context_window` block.
 
+In a linked worktree named after its branch (`.worktrees/ABC-1-fix` on branch
+`ABC-1+fix` or `ABC-1/fix`), the path shown is the main checkout's: the branch
+beside it already says which worktree, so the room goes to the model and the
+context size. A worktree named anything else shows its own path.
+
 Both forms are capped at 90 characters by default (override with the
 `PRR_STATUSLINE_WIDTH` env var, set the same way as `PRR_FANOUT`). A long path is
 trimmed from the left with a leading `...`, so its deep end (a worktree or
@@ -811,11 +816,23 @@ project name), the branch and the model stay visible; if the branch and model
 alone fill the cap, only they are shown. The review line is trimmed with a
 trailing `...`.
 
-Under either form, a second line shows how the last turn went:
+Under either form, a second line shows the open PR for the branch, if any, and
+how the last turn went:
 
 ```text
-⏱ last turn 47.2s · 8 calls · out 3.1k · new in 12k · cache hit 98%
+PR #123 · ⏱ last turn 47.2s · 8 calls · out 3.1k · new in 12k · cache hit 98%
 ```
+
+The PR is looked up with `gh pr list --head <branch> --state open` for the branch
+on the first line (never `main`, `master` or a detached HEAD), so it stays put
+when Claude Code's own footer badge, which follows the session's directory,
+drops out. It is coloured by review state: green approved, gold awaiting review,
+red changes requested, grey draft. `gh` never runs inside a render: the answer
+is cached per repo and branch in `/tmp/prr-statusline-pr-*` for 60 seconds and
+refreshed in the background, one lookup at a time, so the first render on a new
+branch shows no PR and the next one does. A failed lookup (offline, `gh` not
+logged in) keeps the last answer and retries after the same 60 seconds. It
+needs `gh`; set `PRR_STATUSLINE_PR=0` to turn it off.
 
 It is read from the session transcript Claude Code names in the status blob, so
 it needs no hooks. A turn runs from the last prompt you typed to the last reply;
@@ -826,8 +843,8 @@ turn, `out` its output tokens, `new in` the input that was not served from the
 prompt cache, and `cache hit` the share that was: a low hit rate on a long
 session means it is rereading its context. Only the transcript's tail is read,
 so it stays fast on very long sessions. It needs `jq`; without it, or on any
-error, the line is simply left off. It is on by default; set
-`PRR_STATUSLINE_TIMINGS=0` to turn it off.
+error, the line is simply left off. The timings are on by default; set
+`PRR_STATUSLINE_TIMINGS=0` to turn them off.
 
 Each part has its own colour, set by an environment variable (the review
 line's title keeps your terminal's normal colour):

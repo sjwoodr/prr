@@ -116,7 +116,56 @@ EOF
   if [ $((new + cached)) -gt 0 ] && [ "$cached" -gt 0 ]; then
     t="$t · cache hit $((cached * 100 / (new + cached)))%"
   fi
-  printf '\n%s' "$(paint "${PRR_STATUSLINE_TIMINGS_COLOR:-75}" "$t")"
+  paint "${PRR_STATUSLINE_TIMINGS_COLOR:-75}" "$t"
+}
+
+# The open PR for the branch on the first line, e.g. "PR #123", coloured by
+# review state. Claude Code's own footer badge comes and goes with the session's
+# directory; this one follows the branch shown here. gh is never run inline: the
+# answer is cached per repo and branch in /tmp, and a stale or missing entry is
+# refreshed in the background (at most one at a time), so a render never waits
+# on the network. The first render after a branch switch shows nothing; the
+# badge appears on the next one. PRR_STATUSLINE_PR=0 turns it off.
+PR_TTL=60
+pr_badge() {
+  case "${PRR_STATUSLINE_PR:-1}" in 0|false|no|off) return 0 ;; esac
+  case "${branch:-}" in ''|HEAD|main|master) return 0 ;; esac
+  command -v gh >/dev/null 2>&1 || return 0
+  local top key cache now age
+  top="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  key="$(printf '%s|%s' "$top" "$branch" | cksum | cut -d' ' -f1)"
+  cache="/tmp/prr-statusline-pr-$key"
+  now="$(date +%s)"
+  age="$PR_TTL"
+  [ -f "$cache" ] && age=$(( now - $(stat -c %Y "$cache" 2>/dev/null || stat -f %m "$cache" 2>/dev/null || echo 0) ))
+  if [ "$age" -ge "$PR_TTL" ] && mkdir "$cache.lock" 2>/dev/null; then
+    ( r="$(cd "$top" && gh pr list --head "$branch" --state open --limit 1 \
+          --json number,isDraft,reviewDecision \
+          --jq '.[0] | select(.) | "\(.number) \(if .isDraft then "DRAFT" else (.reviewDecision // "") end)"' 2>/dev/null)" \
+        && printf '%s\n' "$r" > "$cache.tmp" && mv "$cache.tmp" "$cache" \
+        || touch "$cache"  # failed (offline, no auth): keep the old answer, retry after PR_TTL
+      rmdir "$cache.lock" ) >/dev/null 2>&1 &
+  fi
+  # A lock left by a killed refresh would block every later one.
+  [ -d "$cache.lock" ] && [ -n "$(find "$cache.lock" -maxdepth 0 -mmin +2 2>/dev/null)" ] && rmdir "$cache.lock" 2>/dev/null
+  [ -s "$cache" ] || return 0
+  local num state color
+  read -r num state < "$cache"
+  case "$num" in ''|*[!0-9]*) return 0 ;; esac
+  case "$state" in
+    APPROVED) color=114 ;; CHANGES_REQUESTED) color=203 ;; DRAFT) color=245 ;; *) color=179 ;;
+  esac
+  paint "$color" "PR #$num"
+}
+
+# Second line: the PR badge, then the timings, joined with " · "; nothing at all
+# when both are empty.
+second_line() {
+  local pr t
+  pr="$(pr_badge)"
+  t="$(timings_line)"
+  if [ -n "$pr" ] && [ -n "$t" ]; then printf '\n%s · %s' "$pr" "$t"
+  elif [ -n "$pr$t" ]; then printf '\n%s' "$pr$t"; fi
 }
 
 # paint COLOR TEXT: TEXT wrapped in COLOR's escape codes (plain when none).
@@ -184,19 +233,36 @@ review_line() {
   fi
 }
 
+cwd="$(printf '%s' "$in" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)"
+[ -n "${cwd:-}" ] || cwd="$PWD"
+branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+
 state="/tmp/prr-status-${sid:-nosession}"
 if [ -f "$state" ]; then
   review_line "$(cat "$state")"
-  timings_line
+  second_line
   exit 0
 fi
 
 # Idle: home-abbreviated cwd + git branch + model, then the context size if the
 # line has room for it.
-cwd="$(printf '%s' "$in" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)"
-[ -n "${cwd:-}" ] || cwd="$PWD"
-if [ "${cwd#$HOME}" != "$cwd" ]; then dir="~${cwd#$HOME}"; else dir="$cwd"; fi
-branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+# A linked worktree named after its branch (`.worktrees/ABC-1-fix` on branch
+# `ABC-1+fix` or `ABC-1/fix`) shows the main checkout's path instead: the branch
+# beside it already says which worktree, and the room goes to the model.
+shown_cwd="$cwd"
+wt_top="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)"
+wt_common="$(cd "$cwd" 2>/dev/null && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)"
+wt_gitdir="$(cd "$cwd" 2>/dev/null && cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd -P)"
+if [ -n "$wt_top" ] && [ -n "${branch:-}" ] && [ "$wt_common" != "$wt_gitdir" ] \
+   && [ "${wt_common##*/}" = ".git" ]; then
+  wt_name="${wt_top##*/}"
+  if [ "$wt_name" = "$branch" ] || [ "$wt_name" = "$(printf '%s' "$branch" | tr '+/' '--')" ]; then
+    wt_rel=""
+    [ "${cwd#"$wt_top"}" != "$cwd" ] && wt_rel="${cwd#"$wt_top"}"
+    shown_cwd="${wt_common%/.git}$wt_rel"
+  fi
+fi
+if [ "${shown_cwd#"$HOME"}" != "$shown_cwd" ]; then dir="~${shown_cwd#"$HOME"}"; else dir="$shown_cwd"; fi
 
 # Model label, e.g. "[Opus 5.5]". display_name is the human-facing name Claude
 # Code sends; fall back to the raw id so an unfamiliar build still shows
@@ -260,4 +326,4 @@ fi
 [ -n "$out" ] || out="$line"
 
 printf '%s' "$out"
-timings_line
+second_line
