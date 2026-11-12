@@ -168,6 +168,16 @@ second_line() {
   elif [ -n "$pr$t" ]; then printf '\n%s' "$pr$t"; fi
 }
 
+# Last line: PRR_STATUSLINE_EXTRA, if set, is a command run with this same
+# stdin JSON; its first output line is printed as is, capped to MAX_WIDTH.
+extra_line() {
+  [ -n "${PRR_STATUSLINE_EXTRA:-}" ] || return 0
+  local x
+  x="$(printf '%s' "$in" | sh -c "$PRR_STATUSLINE_EXTRA" 2>/dev/null | head -n 1)"
+  [ -n "$x" ] && printf '\n%s' "$(emit "$x")"
+  return 0
+}
+
 # paint COLOR TEXT: TEXT wrapped in COLOR's escape codes (plain when none).
 paint() {
   local sgr
@@ -241,6 +251,7 @@ state="/tmp/prr-status-${sid:-nosession}"
 if [ -f "$state" ]; then
   review_line "$(cat "$state")"
   second_line
+  extra_line
   exit 0
 fi
 
@@ -327,3 +338,4 @@ fi
 
 printf '%s' "$out"
 second_line
+extra_line
