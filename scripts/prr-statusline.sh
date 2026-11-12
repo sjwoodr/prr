@@ -46,6 +46,20 @@ emit_left() {
 
 in="$(cat)"
 
+# Text from outside (a PR title, the PRR_STATUSLINE_EXTRA command) must not
+# reach the terminal as control sequences: strip_ctl drops C0 controls, DEL and
+# UTF-8 C1 controls. strip_ctl_sgr does the same but keeps colour codes
+# (ESC [ digits/; m), parking them on \001/\002 while every other ESC is dropped.
+C1="$(printf '\302')[$(printf '\200')-$(printf '\237')]"
+strip_ctl() { LC_ALL=C tr -d '\000-\037\177' | LC_ALL=C sed "s/$C1//g"; }
+strip_ctl_sgr() {
+  local e a b
+  e="$(printf '\033')"; a="$(printf '\001')"; b="$(printf '\002')"
+  LC_ALL=C tr -d '\000-\032\034-\037\177' \
+    | LC_ALL=C sed "s/$e\\[\\([0-9;]*\\)m/$a\\1$b/g" | LC_ALL=C tr -d '\033' \
+    | LC_ALL=C sed "s/$a\\([0-9;]*\\)$b/$e[\\1m/g; s/$C1//g"
+}
+
 sid="$(printf '%s' "$in" | jq -r '.session_id // empty' 2>/dev/null)"
 # jq-free fallback if jq is not on PATH for the status-line invocation.
 if [ -z "${sid:-}" ]; then
@@ -168,7 +182,7 @@ second_line() {
   pr="$(pr_badge)"
   t="$(timings_line)"
   [ -n "${PRR_STATUSLINE_EXTRA:-}" ] \
-    && x="$(printf '%s' "$in" | sh -c "$PRR_STATUSLINE_EXTRA" 2>/dev/null | head -n 1)"
+    && x="$(printf '%s' "$in" | sh -c "$PRR_STATUSLINE_EXTRA" 2>/dev/null | head -n 1 | strip_ctl_sgr)"
   [ -n "$pr" ] && pre="$pr · "
   if [ -n "$t" ]; then
     # Width of everything but the timings, without escape codes (pr and x may be coloured).
@@ -257,7 +271,7 @@ branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 
 state="/tmp/prr-status-${sid:-nosession}"
 if [ -f "$state" ]; then
-  review_line "$(cat "$state")"
+  review_line "$(head -n 1 "$state" | strip_ctl)"
   second_line
   exit 0
 fi

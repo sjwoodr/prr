@@ -486,7 +486,10 @@ fi
 # session id the status line reads from stdin) so parallel fan-out panes each
 # show their own PR. Cleared by post-review.sh. Best-effort and harmless when no
 # statusLine is configured — nothing reads the file.
-title="$(jq -r '.title // empty' "$view" 2>/dev/null || true)"
+# The title is the PR author's text: drop control characters (C0, DEL, UTF-8 C1)
+# so it cannot carry escape sequences into the terminal via the status line.
+title="$(jq -r '.title // empty' "$view" 2>/dev/null | LC_ALL=C tr -d '\000-\037\177' \
+  | LC_ALL=C sed "s/$(printf '\302')[$(printf '\200')-$(printf '\237')]//g" || true)"
 # Verb tracks the mode. These are three different amounts of work with three
 # different endings - a re-review only checks prior findings, and a self-review
 # posts nothing back to the PR at all - and once the setup output has scrolled
