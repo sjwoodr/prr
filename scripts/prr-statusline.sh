@@ -116,7 +116,7 @@ EOF
   if [ $((new + cached)) -gt 0 ] && [ "$cached" -gt 0 ]; then
     t="$t · cache hit $((cached * 100 / (new + cached)))%"
   fi
-  paint "${PRR_STATUSLINE_TIMINGS_COLOR:-75}" "$t"
+  printf '%s' "$t"  # plain: second_line trims it to fit, then colours it
 }
 
 # The open PR for the branch on the first line, e.g. "PR #123", coloured by
@@ -158,23 +158,31 @@ pr_badge() {
   paint "$color" "PR #$num"
 }
 
-# Second line: the PR badge, then the timings, joined with " · "; nothing at all
-# when both are empty.
+# Second line: the PR badge, the timings, then extra text, joined with " · ";
+# nothing at all when all are empty. PRR_STATUSLINE_EXTRA, if set, is a command
+# run with this same stdin JSON; its first output line is the extra text. To fit
+# MAX_WIDTH the timings lose fields from the right, down to the duration; the
+# badge and extra text are never trimmed.
 second_line() {
-  local pr t
+  local pr t x pre=""
   pr="$(pr_badge)"
   t="$(timings_line)"
-  if [ -n "$pr" ] && [ -n "$t" ]; then printf '\n%s · %s' "$pr" "$t"
-  elif [ -n "$pr$t" ]; then printf '\n%s' "$pr$t"; fi
-}
-
-# Last line: PRR_STATUSLINE_EXTRA, if set, is a command run with this same
-# stdin JSON; its first output line is printed as is, capped to MAX_WIDTH.
-extra_line() {
-  [ -n "${PRR_STATUSLINE_EXTRA:-}" ] || return 0
-  local x
-  x="$(printf '%s' "$in" | sh -c "$PRR_STATUSLINE_EXTRA" 2>/dev/null | head -n 1)"
-  [ -n "$x" ] && printf '\n%s' "$(emit "$x")"
+  [ -n "${PRR_STATUSLINE_EXTRA:-}" ] \
+    && x="$(printf '%s' "$in" | sh -c "$PRR_STATUSLINE_EXTRA" 2>/dev/null | head -n 1)"
+  [ -n "$pr" ] && pre="$pr · "
+  if [ -n "$t" ]; then
+    # Width of everything but the timings, without escape codes (pr and x may be coloured).
+    local vis used
+    vis="$(printf '%s%s' "$pre" "$x" | sed "s/$(printf '\033')\[[0-9;]*m//g")"
+    used="${#vis}"
+    [ -n "$x" ] && used=$(( used + 3 ))
+    while [ $(( used + ${#t} )) -gt "$MAX_WIDTH" ] && [ "${t% · *}" != "$t" ]; do t="${t% · *}"; done
+    t="$(paint "${PRR_STATUSLINE_TIMINGS_COLOR:-75}" "$t")"
+  fi
+  local line="$pr"
+  [ -n "$t" ] && line="${line:+$line · }$t"
+  [ -n "$x" ] && line="${line:+$line · }$x"
+  [ -n "$line" ] && printf '\n%s' "$line"
   return 0
 }
 
@@ -251,7 +259,6 @@ state="/tmp/prr-status-${sid:-nosession}"
 if [ -f "$state" ]; then
   review_line "$(cat "$state")"
   second_line
-  extra_line
   exit 0
 fi
 
@@ -338,4 +345,3 @@ fi
 
 printf '%s' "$out"
 second_line
-extra_line
