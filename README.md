@@ -149,7 +149,8 @@ Two notes:
 ## Claude Code: running under the sandbox (optional)
 
 With Claude Code's sandbox on (`sandbox.enabled`), shell commands can only
-write to the project and `/tmp`, and only reach allow-listed hosts. Some prr
+write to the project and the temporary folder (all of `/tmp` on Linux, only
+`/tmp/claude` on macOS), and only reach allow-listed hosts. Some prr
 steps cannot work inside it, so add their scripts to
 `sandbox.excludedCommands`, which runs them outside the sandbox:
 
@@ -161,8 +162,9 @@ steps cannot work inside it, so add their scripts to
 - `source-b.sh` and `source-c.sh` run an outside model through pi, opencode
   or codex, which need their own network access and state.
 
-`source-b-clock.sh` only writes stamps under `/tmp`, so it works inside the
-sandbox and is not excluded. Run this yourself (in Claude Code, prefix it with
+`source-b-clock.sh` writes its timing stamps to `/tmp/pr-<N>-*`. That works
+inside the sandbox on Linux, but on macOS only `/tmp/claude` is writable, so
+it is excluded too (on Linux the exclusion is harmless). Run this yourself (in Claude Code, prefix it with
 `!`: the sandbox does not let Claude write your settings file):
 
 ```bash
@@ -170,7 +172,7 @@ F=~/.claude/settings.json
 [ -f "$F" ] || echo '{}' > "$F"
 TMP=$(mktemp)
 jq --arg h "$HOME" '
-  ([ "setup-review.sh", "post-review.sh", "prr-fanout.sh", "source-b.sh", "source-c.sh" ]
+  ([ "setup-review.sh", "post-review.sh", "prr-fanout.sh", "source-b.sh", "source-b-clock.sh", "source-c.sh" ]
    | map("\($h)/.claude/skills/prr/scripts/\(.) *", "~/.claude/skills/prr/scripts/\(.) *")) as $new
   | .sandbox.excludedCommands = ((.sandbox.excludedCommands // []) + ($new - (.sandbox.excludedCommands // [])))
 ' "$F" > "$TMP" && mv "$TMP" "$F"
@@ -195,6 +197,10 @@ Notes:
   allowlist for them. The rest of the review runs sandboxed, including the
   `gh` calls the agent makes itself (CI checks, the head re-check), so allow
   `github.com` and `api.github.com`.
+- On macOS, `gh` and other Go programs currently fail TLS verification inside
+  the sandbox (`x509: OSStatus -26276`), a known Claude Code issue. The
+  agent's own `gh` calls then get retried outside the sandbox, approved by
+  your allow-list, a prompt, or the auto-mode classifier.
 
 ## Using it
 
