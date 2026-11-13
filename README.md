@@ -504,7 +504,7 @@ Tune (or opt out) via environment:
   launcher stops, reports which PRs are still open, and **leaves your in-progress
   panes alone** (it prints the `tmux attach` command to finish them by hand).
 - `PRR_FANOUT_TERMINAL` — force the terminal, skipping detection. On **Linux**
-  the auto-detection order is `tilix`, `terminator`, `wezterm`,
+  the auto-detection order is `tilix`, `terminator`, `wezterm`, `kitty`,
   `gnome-terminal`, `x-terminal-emulator` (the desktop default via
   `update-alternatives`), then `xterm`. On **macOS** the order is **iTerm2**, then
   the built-in **Terminal.app** — macOS apps are not on `PATH`, so detection asks
@@ -532,7 +532,9 @@ Tune (or opt out) via environment:
   Terminals that ignore the escape (or other Linux terminals) open at their
   default size — the panes still tile evenly and re-tile if you resize the
   window. `wezterm` has no geometry flag, so the size is applied through its
-  `--config initial_cols`/`initial_rows` overrides instead. Bump it for big
+  `--config initial_cols`/`initial_rows` overrides instead, and `kitty` through
+  `-o initial_window_width`/`initial_window_height` in cells (with
+  `remember_window_size=no`, or it reuses its last window's size). Bump it for big
   batches so the tiled panes stay readable (e.g. `220x60` for a 3x3 grid of
   eight).
 - `PRR_FANOUT_GEOMETRY_SINGLE` — the window size for a single-PR fan-out
@@ -541,7 +543,7 @@ Tune (or opt out) via environment:
 
 Notes: `gnome-terminal` runs its command in a background server, so depending on
 your profile's "When command exits" setting the window may linger after the
-panes close; `wezterm`, `tilix`, and `xterm` close cleanly. On **macOS** Terminal.app leaves
+panes close; `wezterm`, `tilix`, `kitty`, and `xterm` close cleanly. On **macOS** Terminal.app leaves
 the spawned window on "[Process completed]" when the panes finish (the panes
 always close inside tmux regardless). To have it close automatically, set
 Terminal's shell-exit action once, then relaunch Terminal:

@@ -80,8 +80,9 @@ for n in "${numbers[@]}"; do rm -f "/tmp/prr-fanout-${n}.result"; done
 # --- pick a terminal ---------------------------------------------------------
 # macOS: iTerm2 when it is installed, else the built-in Terminal.app;
 # PRR_FANOUT_TERMINAL overrides both (best-effort, see the spawn below). Linux:
-# tilix, terminator, wezterm, gnome-terminal, x-terminal-emulator (the desktop
-# default via update-alternatives), xterm; PRR_FANOUT_TERMINAL forces a binary.
+# tilix, terminator, wezterm, kitty, gnome-terminal, x-terminal-emulator (the
+# desktop default via update-alternatives), xterm; PRR_FANOUT_TERMINAL forces a
+# binary.
 term_bundle=""   # macOS: bundle id, when we can resolve one (see the spawn below)
 if [[ "$os" == "Darwin" ]]; then
   # macOS apps are not on PATH, so `command -v` cannot see them the way the Linux
@@ -109,11 +110,11 @@ if [[ "$os" == "Darwin" ]]; then
   fi
 else
   term=""
-  for t in "${PRR_FANOUT_TERMINAL:-}" tilix terminator wezterm gnome-terminal x-terminal-emulator xterm; do
+  for t in "${PRR_FANOUT_TERMINAL:-}" tilix terminator wezterm kitty gnome-terminal x-terminal-emulator xterm; do
     [[ -n "$t" ]] && command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
   done
   [[ -n "$term" ]] \
-    || { echo "$TAG: no supported terminal (tilix/terminator/wezterm/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
+    || { echo "$TAG: no supported terminal (tilix/terminator/wezterm/kitty/gnome-terminal/x-terminal-emulator/xterm)." >&2; exit 3; }
 fi
 echo "$TAG: terminal: $term"
 
@@ -214,6 +215,9 @@ else
     terminator)     "${SP[@]}" "$term" --geometry="$geo" -e "$attach"                >"$spawnlog" 2>&1 & ;;
     gnome-terminal) "${SP[@]}" "$term" --geometry="$geo" -- tmux attach -t "$session" >"$spawnlog" 2>&1 & ;;
     xterm)          "${SP[@]}" "$term" -geometry "$geo"  -e "$attach"                >"$spawnlog" 2>&1 & ;;
+    # kitty takes the program as trailing argv (no -e) and sizes in cells with a
+    # `c` suffix; remember_window_size=no stops it reusing the last window's size.
+    kitty)          "${SP[@]}" "$term" -o remember_window_size=no -o "initial_window_width=${cols}c" -o "initial_window_height=${rows}c" tmux attach -t "$session" >"$spawnlog" 2>&1 & ;;
     *)              "${SP[@]}" "$term" -e "$attach"                                   >"$spawnlog" 2>&1 & ;;
   esac
 fi
