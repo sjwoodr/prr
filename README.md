@@ -145,6 +145,56 @@ Two notes:
   permission prompt - it cannot (and should not) be allow-listed away. prr
   never writes to GitHub until you say so.
 
+## Claude Code: running under the sandbox (optional)
+
+With Claude Code's sandbox on (`sandbox.enabled`), shell commands can only
+write to the project and `/tmp`, and only reach allow-listed hosts. Some prr
+steps cannot work inside it, so add their scripts to
+`sandbox.excludedCommands`, which runs them outside the sandbox:
+
+- `setup-review.sh` and `post-review.sh` create and remove the review
+  worktree with `git worktree add` / `remove`. Those write the repo's
+  `.git/worktrees`, which the sandbox keeps read-only. `post-review.sh` also
+  appends to the run log under `~/.local/state/prr`.
+- `prr-fanout.sh` opens terminal panes or windows.
+- `source-b.sh` and `source-c.sh` run an outside model through pi, opencode
+  or codex, which need their own network access and state.
+
+`source-b-clock.sh` only writes stamps under `/tmp`, so it works inside the
+sandbox and is not excluded. Run this yourself (in Claude Code, prefix it with
+`!`: the sandbox does not let Claude write your settings file):
+
+```bash
+F=~/.claude/settings.json
+[ -f "$F" ] || echo '{}' > "$F"
+TMP=$(mktemp)
+jq --arg h "$HOME" '
+  ([ "setup-review.sh", "post-review.sh", "prr-fanout.sh", "source-b.sh", "source-c.sh" ]
+   | map("\($h)/.claude/skills/prr/scripts/\(.) *", "~/.claude/skills/prr/scripts/\(.) *")) as $new
+  | .sandbox.excludedCommands = ((.sandbox.excludedCommands // []) + ($new - (.sandbox.excludedCommands // [])))
+' "$F" > "$TMP" && mv "$TMP" "$F"
+jq '.sandbox.excludedCommands' "$F"
+```
+
+Notes:
+
+- Both path forms are needed for the same reason as the allow-list above:
+  the match is literal and `~` is not expanded. A `~/...` entry alone does
+  not exclude a run invoked by its absolute path, and the run then fails
+  inside the sandbox at `git worktree remove`.
+- Every command in a call must match for the exclusion to apply, which is
+  one more reason to invoke the scripts bare.
+- Do not shorten the entries to a leading wildcard such as
+  `*/prr/scripts/setup-review.sh *`. That would also match any script of the
+  same name anywhere on disk and let it run outside the sandbox.
+- Excluding a command does not approve it: the allow-list above still
+  decides whether it runs without a prompt.
+- The excluded scripts make their own calls to GitHub, Slack and Jira from
+  outside the sandbox, so those hosts do not need to be on your network
+  allowlist for them. The rest of the review runs sandboxed, including the
+  `gh` calls the agent makes itself (CI checks, the head re-check), so allow
+  `github.com` and `api.github.com`.
+
 ## Using it
 
 With a full PR URL, from any directory:
