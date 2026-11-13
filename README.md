@@ -122,11 +122,12 @@ limited to the prr scripts and the `pr-<N>-review.json` payload file under
 `/tmp` (throwaway space). Three rule forms are installed because Claude Code's
 permission matcher compares the command string literally — it does not expand
 `~`, `$HOME`, or `$SKILL_DIR` before matching, so a rule only fires when its
-form matches how the command is written. SKILL.md invokes the scripts via the
-`~/.claude/skills/prr/...` form, so the tilde rules are the ones that normally
-match; the fully-expanded absolute-path rules and the path-independent
-`$SKILL_DIR` rules are belt-and-suspenders for the default install location and
-for any custom invocation that uses those forms instead.
+form matches how the command is written. SKILL.md tells the agent to invoke
+each script by its absolute path, taken from the skill's base directory, so
+the absolute-path rules are the ones that normally match. The tilde rules cover
+an agent that copies the `~/.claude/skills/prr/...` examples in SKILL.md
+literally, and the path-independent `$SKILL_DIR` rules cover any custom
+invocation that uses that form.
 
 Two notes:
 
